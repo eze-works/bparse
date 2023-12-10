@@ -1,3 +1,4 @@
+use std::cell::Cell;
 mod accept_condition;
 pub use accept_condition::AcceptCondition;
 
@@ -9,7 +10,19 @@ pub fn b<S: AsRef<[u8]> + ?Sized>(s: &S) -> &[u8] {
 /// A parser for byte slices
 pub struct BParse<'input> {
     input: &'input [u8],
-    pos: usize,
+    // The API allows returning immutable references to `input`.
+    // I want this to be valid:
+    //
+    // ```
+    //  let mut p = BParse::new(b("hello world"));
+    //  let hello = p.accept("hello");
+    //  let sp = p.accept(" ");
+    //  println!("{:#?}", hello);
+    // ```
+    //
+    // To do this properly, the calls that modify the position can't take a mutable reference to
+    // `self` since that would mean the lifetime of the returned value would be mutable.
+    pos: Cell<usize>,
 }
 
 impl<'i> BParse<'i> {
@@ -27,12 +40,10 @@ impl<'i> BParse<'i> {
     /// [`u8`](crate::AcceptCondition#byte-implementation),
     /// [`&[u8]`](crate::AcceptCondition#slice-implementation), or a range.
     ///
-    /// For ranges, use `u8` bounds to recognize individual bytes. Use `u32` bounds to
-    /// recognize utf8 scalar values.
+    /// See [`AcceptCondition`] for more details on what can be used as a `condition`.
     ///
-    /// [`AcceptCondition`] is implemented for [`std::ops::RangeFrom`] (e.g. `8..`),
-    /// [`std::ops::RangeInclusive`] (e.g. `..=89`) and [`std::ops::RangeToInclusive`] (e.g.
-    /// `32..=34`)
+    /// If the condition holds at the parser's current position, this method returns a slice
+    /// of the parser's input.
     ///
     /// # Examples
     ///
@@ -52,11 +63,12 @@ impl<'i> BParse<'i> {
     /// );
     /// ```
     /// parser.accept(Condition::
-    pub fn accept(&mut self, condition: impl AcceptCondition) -> Option<&[u8]> {
-        let offset = condition.matches(&self.input[self.pos..])?;
-        let old_pos = self.pos;
-        self.pos += offset;
-        return Some(&self.input[old_pos..self.pos]);
+    pub fn accept(&self, condition: impl AcceptCondition) -> Option<&[u8]> {
+        let current_pos = self.pos.get();
+        let offset = condition.matches(&self.input[current_pos..])?;
+        let new_pos = current_pos + offset;
+        self.pos.replace(new_pos);
+        return Some(&self.input[current_pos..new_pos]);
     }
 }
 
@@ -64,6 +76,13 @@ impl<'i> BParse<'i> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn mutability() {
+        let mut p = BParse::new(b("hello world"));
+        let hello = p.accept("hello");
+        let sp = p.accept(" ");
+        println!("{:#?}", hello);
+    }
     #[test]
     fn test_accept() {
         // Can accept nothing
