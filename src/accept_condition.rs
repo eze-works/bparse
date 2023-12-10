@@ -6,12 +6,12 @@ use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
 pub trait AcceptCondition {
     /// Returns a value indicating if the [`BParse`](crate::BParse) should advance, and if
     /// so, by how many bytes
-    fn advance(&self, input: &[u8]) -> Option<usize>;
+    fn matches(&self, input: &[u8]) -> Option<usize>;
 }
 
 /// # String slice implementation
 impl AcceptCondition for &str {
-    fn advance(&self, input: &[u8]) -> Option<usize> {
+    fn matches(&self, input: &[u8]) -> Option<usize> {
         let bytes = self.as_bytes();
         let Some(_) = input.strip_prefix(bytes) else {
             return None;
@@ -23,7 +23,7 @@ impl AcceptCondition for &str {
 
 /// # Slice implementation
 impl AcceptCondition for &[u8] {
-    fn advance(&self, input: &[u8]) -> Option<usize> {
+    fn matches(&self, input: &[u8]) -> Option<usize> {
         let Some(_) = input.strip_prefix(*self) else {
             return None;
         };
@@ -34,20 +34,20 @@ impl AcceptCondition for &[u8] {
 
 /// # Byte implementation
 impl AcceptCondition for u8 {
-    fn advance(&self, input: &[u8]) -> Option<usize> {
+    fn matches(&self, input: &[u8]) -> Option<usize> {
         input.starts_with(&[*self]).then_some(1)
     }
 }
 
 impl AcceptCondition for RangeFrom<u8> {
-    fn advance(&self, input: &[u8]) -> Option<usize> {
+    fn matches(&self, input: &[u8]) -> Option<usize> {
         let first = *input.get(0)?;
         (first >= self.start).then_some(1)
     }
 }
 
 impl AcceptCondition for RangeFrom<u32> {
-    fn advance(&self, input: &[u8]) -> Option<usize> {
+    fn matches(&self, input: &[u8]) -> Option<usize> {
         let mut iter = input.char_indices();
         let (start, end, c) = iter.next()?;
 
@@ -58,14 +58,14 @@ impl AcceptCondition for RangeFrom<u32> {
 }
 
 impl AcceptCondition for RangeToInclusive<u8> {
-    fn advance(&self, input: &[u8]) -> Option<usize> {
+    fn matches(&self, input: &[u8]) -> Option<usize> {
         let first = *input.get(0)?;
         (first <= self.end).then_some(1)
     }
 }
 
 impl AcceptCondition for RangeToInclusive<u32> {
-    fn advance(&self, input: &[u8]) -> Option<usize> {
+    fn matches(&self, input: &[u8]) -> Option<usize> {
         let mut iter = input.char_indices();
         let (start, end, c) = iter.next()?;
 
@@ -76,14 +76,14 @@ impl AcceptCondition for RangeToInclusive<u32> {
 }
 
 impl AcceptCondition for RangeInclusive<u8> {
-    fn advance(&self, input: &[u8]) -> Option<usize> {
+    fn matches(&self, input: &[u8]) -> Option<usize> {
         let first = input.get(0)?;
         (first >= self.start() && first <= self.end()).then_some(1)
     }
 }
 
 impl AcceptCondition for RangeInclusive<u32> {
-    fn advance(&self, input: &[u8]) -> Option<usize> {
+    fn matches(&self, input: &[u8]) -> Option<usize> {
         let mut iter = input.char_indices();
         let (start, end, c) = iter.next()?;
 

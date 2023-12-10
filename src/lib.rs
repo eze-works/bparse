@@ -25,11 +25,10 @@ impl<'i> BParse<'i> {
     ///
     /// `condition` can be a [`&str`](crate::AcceptCondition#string-slice-implementation),
     /// [`u8`](crate::AcceptCondition#byte-implementation),
-    /// [`u32`](crate::AcceptCondition#char-implementation),
     /// [`&[u8]`](crate::AcceptCondition#slice-implementation), or a range.
     ///
-    /// For ranges, use `u8` bounds for recognizing individual bytes. Use `u32` bounds for
-    /// recognizing utf8 scalar values.
+    /// For ranges, use `u8` bounds to recognize individual bytes. Use `u32` bounds to
+    /// recognize utf8 scalar values.
     ///
     /// [`AcceptCondition`] is implemented for [`std::ops::RangeFrom`] (e.g. `8..`),
     /// [`std::ops::RangeInclusive`] (e.g. `..=89`) and [`std::ops::RangeToInclusive`] (e.g.
@@ -52,8 +51,9 @@ impl<'i> BParse<'i> {
     ///     parser.accept('\u{669}' as u32..='\u{700}' as u32)
     /// );
     /// ```
+    /// parser.accept(Condition::
     pub fn accept(&mut self, condition: impl AcceptCondition) -> Option<&[u8]> {
-        let offset = condition.advance(&self.input[self.pos..])?;
+        let offset = condition.matches(&self.input[self.pos..])?;
         let old_pos = self.pos;
         self.pos += offset;
         return Some(&self.input[old_pos..self.pos]);
@@ -98,5 +98,11 @@ mod tests {
             None,
             BParse::new(b("٩")).accept('\u{667}' as u32..='\u{668}' as u32)
         );
+
+        // Edge cases
+
+        // Trying to accept more input than is available
+        assert_eq!(None, BParse::new(b("a")).accept("ab"));
+        assert_eq!(None, BParse::new(b("a")).accept(b("ab")));
     }
 }
