@@ -1,6 +1,13 @@
 use std::cell::Cell;
-pub mod condition;
-use condition::Accept;
+pub mod byte_pattern;
+
+use byte_pattern::BytePattern;
+
+/// Rexports of the parts of the crate commonly used together
+pub mod prelude {
+    pub use crate::byte_pattern::BytePattern;
+    pub use crate::{b, BParse};
+}
 
 /// A short-hand constructor for building a `&[u8]`
 pub fn b<S: AsRef<[u8]> + ?Sized>(s: &S) -> &[u8] {
@@ -34,17 +41,17 @@ impl<'i> BParse<'i> {
         }
     }
 
-    /// Advances the parser if the input matches `condition` at the current position
+    /// Advances the parser if the input matches `pattern` at the current position
     ///
-    /// Look to the [`Accept`] `impls` for what can be used as `condition`.
+    /// If the pattern matches at the parser's current position, this method returns a slice of the
+    /// parser's input.
     ///
-    /// If the condition holds at the parser's current position, this method returns a slice
-    /// of the parser's input.
+    /// Look to the [`BytePattern`] `impl`s for what can be used as `pattern`.
     ///
     /// # Examples
     ///
     /// ```
-    /// use bparse::{BParse, b};
+    /// use bparse::prelude::*;
     ///
     /// let raw = "hello_world1👻٩".as_ref();
     /// let parser = BParse::new(raw);
@@ -58,10 +65,10 @@ impl<'i> BParse<'i> {
     ///     parser.accept('\u{669}' as u32..='\u{700}' as u32)
     /// );
     /// ```
-    pub fn accept(&self, condition: impl Accept) -> Option<&[u8]> {
+    pub fn accept(&self, pattern: impl BytePattern) -> Option<&[u8]> {
         let current_pos = self.pos.get();
-        let offset = condition.matches(&self.input[current_pos..])?;
-        let new_pos = current_pos + offset;
+        let s = pattern.matches(&self.input[current_pos..])?;
+        let new_pos = current_pos + s.len();
         self.pos.replace(new_pos);
         return Some(&self.input[current_pos..new_pos]);
     }
@@ -69,7 +76,7 @@ impl<'i> BParse<'i> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::prelude::*;
 
     #[test]
     fn test_accept() {
@@ -105,8 +112,10 @@ mod tests {
             None,
             BParse::new(b("٩")).accept('\u{667}' as u32..='\u{668}' as u32)
         );
-
-        assert_eq!(Some(b("7")), BParse::new(b("7")).accept(("0", "1", "7")));
+        assert_eq!(
+            Some(b("7")),
+            BParse::new(b("7")).accept("0".or("1").or("7"))
+        );
 
         // Edge cases
 
@@ -114,4 +123,16 @@ mod tests {
         assert_eq!(None, BParse::new(b("a")).accept("ab"));
         assert_eq!(None, BParse::new(b("a")).accept(b("ab")));
     }
+
+    #[test]
+    fn huh() {
+        let input = b("978");
+        let parser = BParse::new(input);
+
+        assert_eq!(Some(b("978")), parser.accept("9".then("7").then("8")));
+    }
 }
+
+#[doc = include_str!("../README.md")]
+#[cfg(doctest)]
+pub struct ReadmeDocTests {}
