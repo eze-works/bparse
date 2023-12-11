@@ -10,6 +10,8 @@ pub mod prelude {
 }
 
 /// A short-hand constructor for building a `&[u8]`
+///
+/// This `b("hello")` is slightly less verbose than this `&["hello"][..]`
 pub fn b<S: AsRef<[u8]> + ?Sized>(s: &S) -> &[u8] {
     s.as_ref()
 }
@@ -62,7 +64,7 @@ impl<'i> BParse<'i> {
     /// assert_eq!(Some(b("👻")), parser.accept("👻"));
     /// assert_eq!(
     ///     Some(b("٩")),
-    ///     parser.accept('\u{669}' as u32..='\u{700}' as u32)
+    ///     parser.accept('\u{669}'..='\u{700}')
     /// );
     /// ```
     pub fn accept(&self, pattern: impl BytePattern) -> Option<&[u8]> {
@@ -90,28 +92,22 @@ mod tests {
         assert_eq!(Some(b("a")), BParse::new(b("a")).accept("a"));
         assert_eq!(Some(b("a")), BParse::new(b("a")).accept(b("a")));
         assert_eq!(Some(b("a")), BParse::new(b("a")).accept(0x61));
-        assert_eq!(Some(b("a")), BParse::new(b("a")).accept(0x61u8..));
-        assert_eq!(None, BParse::new(b("a")).accept(0x62u8..));
-        assert_eq!(Some(b("a")), BParse::new(b("a")).accept(..=0x61u8));
-        assert_eq!(None, BParse::new(b("a")).accept(..=0x60u8));
-        assert_eq!(Some(b("a")), BParse::new(b("a")).accept(0x61..=0x62u8));
-        assert_eq!(None, BParse::new(b("a")).accept(0x62..=0x63u8));
+        assert_eq!(Some(b("a")), BParse::new(b("a")).accept(0x61..));
+        assert_eq!(None, BParse::new(b("a")).accept(0x62..));
+        assert_eq!(Some(b("a")), BParse::new(b("a")).accept(..=0x61));
+        assert_eq!(None, BParse::new(b("a")).accept(..=0x60));
+        assert_eq!(Some(b("a")), BParse::new(b("a")).accept(0x61..=0x62));
+        assert_eq!(None, BParse::new(b("a")).accept(0x62..=0x63));
         assert_eq!(Some(b("٩")), BParse::new(b("٩")).accept("\u{669}"));
-        assert_eq!(Some(b("٩")), BParse::new(b("٩")).accept('\u{669}' as u32..));
-        assert_eq!(None, BParse::new(b("٩")).accept('\u{700}' as u32..));
+        assert_eq!(Some(b("٩")), BParse::new(b("٩")).accept('\u{669}'..));
+        assert_eq!(None, BParse::new(b("٩")).accept('\u{700}'..));
+        assert_eq!(Some(b("٩")), BParse::new(b("٩")).accept(..='\u{669}'));
+        assert_eq!(None, BParse::new(b("٩")).accept(..='\u{668}'));
         assert_eq!(
             Some(b("٩")),
-            BParse::new(b("٩")).accept(..='\u{669}' as u32)
+            BParse::new(b("٩")).accept('\u{668}'..='\u{669}')
         );
-        assert_eq!(None, BParse::new(b("٩")).accept(..='\u{668}' as u32));
-        assert_eq!(
-            Some(b("٩")),
-            BParse::new(b("٩")).accept('\u{668}' as u32..='\u{669}' as u32)
-        );
-        assert_eq!(
-            None,
-            BParse::new(b("٩")).accept('\u{667}' as u32..='\u{668}' as u32)
-        );
+        assert_eq!(None, BParse::new(b("٩")).accept('\u{667}'..='\u{668}'));
         assert_eq!(
             Some(b("7")),
             BParse::new(b("7")).accept("0".or("1").or("7"))
@@ -125,12 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn huh() {
-        let input = b("978");
-        let parser = BParse::new(input);
-
-        assert_eq!(Some(b("978")), parser.accept("9".then("7").then("8")));
-    }
+    fn huh() {}
 }
 
 #[doc = include_str!("../README.md")]

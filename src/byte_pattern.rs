@@ -102,6 +102,21 @@ impl<C1: BytePattern, C2: BytePattern> BytePattern for Then<C1, C2> {
     }
 }
 
+/// [`BytePattern`] implementation for string slices.
+///
+/// Matches unicode scalar values in the byte input.
+///
+/// # Example
+///
+/// ```
+/// use bparse::prelude::*;
+///
+/// let parser = BParse::new(b("🙂hello"));
+///
+/// assert_eq!(Some(b("🙂")), parser.accept("🙂"));
+/// assert_eq!(Some(b("hello")), parser.accept("hello"));
+///
+/// ```
 impl BytePattern for &str {
     fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let bytes = self.as_bytes();
@@ -113,6 +128,19 @@ impl BytePattern for &str {
     }
 }
 
+/// [`BytePattern`] implementation for byte slices
+///
+/// The [`b()`](crate::b) helper function can be used to simplify the creation of byte slices
+///
+/// # Example
+///
+/// ```
+/// use bparse::prelude::*;
+///
+/// let parser = BParse::new(b("1234"));
+///
+/// assert_eq!(Some(b(&[0x31,0x32])), parser.accept(b("12")));
+/// ```
 impl BytePattern for &[u8] {
     fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let Some(_) = input.strip_prefix(*self) else {
@@ -123,12 +151,35 @@ impl BytePattern for &[u8] {
     }
 }
 
+/// [`BytePattern`] implementation for a byte
+///
+///
+/// # Example
+///
+/// ```
+/// use bparse::prelude::*;
+///
+/// let parser = BParse::new(b(&[123, 7]));
+///
+/// assert_eq!(Some(b(&[123])), parser.accept(123));
+/// ```
 impl BytePattern for u8 {
     fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         input.starts_with(&[*self]).then_some(&input[0..1])
     }
 }
 
+/// [`BytePattern`] implementation for ranges of the form `0..`
+///
+/// # Example
+///
+/// ```
+/// use bparse::prelude::*;
+///
+/// let parser = BParse::new(b(&[123]));
+///
+/// assert_eq!(Some(b(&[123])), parser.accept(0..));
+/// ```
 impl BytePattern for RangeFrom<u8> {
     fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let first = *input.get(0)?;
@@ -136,17 +187,39 @@ impl BytePattern for RangeFrom<u8> {
     }
 }
 
-impl BytePattern for RangeFrom<u32> {
+/// [`BytePattern`] implementattion for ranges of the form `'a'..`
+///
+/// Matches a range of unicode scalar values in the byte input.
+///
+/// # Example
+///
+/// ```
+/// use bparse::prelude::*;
+///
+/// let parser = BParse::new(b("┦"));
+/// assert_eq!(Some(b("┦")), parser.accept('\u{2520}'..));
+/// ```
+impl BytePattern for RangeFrom<char> {
     fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
 
         let c = c as u32;
 
-        (c >= self.start).then_some(&input[..end])
+        (c >= self.start as u32).then_some(&input[..end])
     }
 }
 
+/// [`BytePattern`] implementation for ranges of the form `..=10`
+///
+/// # Example
+///
+/// ```
+/// use bparse::prelude::*;
+///
+/// let parser = BParse::new(&[10]);
+/// assert_eq!(Some(b(&[10])), parser.accept(..=10));
+/// ```
 impl BytePattern for RangeToInclusive<u8> {
     fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let first = *input.get(0)?;
@@ -154,17 +227,38 @@ impl BytePattern for RangeToInclusive<u8> {
     }
 }
 
-impl BytePattern for RangeToInclusive<u32> {
+/// [`BytePattern`] implementation for ranges of the form `..='Z'`
+///
+/// # Example
+///
+/// ```
+/// use bparse::prelude::*;
+///
+/// let parser = BParse::new(b("Y"));
+/// assert_eq!(Some(b("Y")), parser.accept(..='Z'));
+///
+/// ```
+impl BytePattern for RangeToInclusive<char> {
     fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
 
         let c = c as u32;
 
-        (c <= self.end).then_some(&input[..end])
+        (c <= self.end as u32).then_some(&input[..end])
     }
 }
 
+/// [`BytePattern`] implementation for ranges of the form `0..=9`
+///
+/// # Example
+///
+/// ```
+/// use bparse::prelude::*;
+///
+/// let parser = BParse::new(b("7"));
+/// assert_eq!(Some(b("7")), parser.accept(0x30..=0x39));
+/// ```
 impl BytePattern for RangeInclusive<u8> {
     fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let first = input.get(0)?;
@@ -172,13 +266,22 @@ impl BytePattern for RangeInclusive<u8> {
     }
 }
 
-impl BytePattern for RangeInclusive<u32> {
+/// [`BytePattern`] implementation for ranges of the form `'a'..='z'`
+///
+/// # Example
+/// ```
+/// use bparse::prelude::*;
+///
+/// let parser = BParse::new(b("d"));
+/// assert_eq!(Some(b("d")), parser.accept(0x61..=0x7A));
+/// ```
+impl BytePattern for RangeInclusive<char> {
     fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
 
         let c = c as u32;
 
-        (c >= *self.start() && c <= *self.end()).then_some(&input[..end])
+        (c >= *self.start() as u32 && c <= *self.end() as u32).then_some(&input[..end])
     }
 }
