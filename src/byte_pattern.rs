@@ -115,27 +115,6 @@ impl BytePattern for &str {
     }
 }
 
-/// [`BytePattern`] implementation for byte slices
-///
-/// The [`b()`](crate::b) helper function can be used to simplify the creation of byte slices
-///
-/// # Example
-///
-/// ```
-/// use bparse::prelude::*;
-///
-/// assert_eq!(Some(b(&[0x31,0x32])), b("12").try_match(b("1234")));
-/// ```
-impl BytePattern for &[u8] {
-    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
-        let Some(_) = input.strip_prefix(*self) else {
-            return None;
-        };
-
-        Some(&input[..self.len()])
-    }
-}
-
 /// [`BytePattern`] implementation for a byte
 ///
 ///
@@ -144,7 +123,7 @@ impl BytePattern for &[u8] {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// assert_eq!(Some(b(&[123])), 123.try_match(b(&[123])));
+/// assert_eq!(Some(b(&[123])), 123.try_match(&[123]));
 /// ```
 impl BytePattern for u8 {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
@@ -159,7 +138,7 @@ impl BytePattern for u8 {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// assert_eq!(Some(b(&[123])), (0..).try_match(b(&[123])));
+/// assert_eq!(Some(b(&[123])), (0..).try_match(&[123]));
 /// ```
 impl BytePattern for RangeFrom<u8> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
@@ -177,7 +156,7 @@ impl BytePattern for RangeFrom<u8> {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// assert_eq!(Some(b("┦")), ('\u{2520}'..).try_match(b("┦")));
+/// assert_eq!(Some(b("┦")), ('\u{2520}'..).try_match(b"\xE2\x94\xA6"));
 /// ```
 impl BytePattern for RangeFrom<char> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
@@ -213,7 +192,7 @@ impl BytePattern for RangeToInclusive<u8> {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// assert_eq!(Some(b("Y")), (..='Z').try_match(b("Y")));
+/// assert_eq!(Some(b("Y")), (..='Z').try_match(b"Y"));
 ///
 /// ```
 impl BytePattern for RangeToInclusive<char> {
@@ -234,7 +213,7 @@ impl BytePattern for RangeToInclusive<char> {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// assert_eq!(Some(b("7")), (0x30..=0x39).try_match(b("7")));
+/// assert_eq!(Some(b("7")), (0x30..=0x39).try_match(b"7"));
 /// ```
 impl BytePattern for RangeInclusive<u8> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
@@ -249,7 +228,7 @@ impl BytePattern for RangeInclusive<u8> {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// assert_eq!(Some(b("d")), (0x61..=0x7A).try_match(b("d")));
+/// assert_eq!(Some(b("d")), (0x61..=0x7A).try_match(b"d"));
 /// ```
 impl BytePattern for RangeInclusive<char> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
