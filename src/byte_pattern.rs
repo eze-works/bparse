@@ -4,27 +4,21 @@
 use bstr::ByteSlice;
 use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
 
-/// Expresses that the implementing type can be used as a condition for advancing
-/// [`BParse`](crate::BParse)
+/// Expresses that the implementing type can be used as a condition for matching a byte slice
 pub trait BytePattern {
     /// Returns the slice of the input that is recognized, if any
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]>;
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]>;
 
     /// Patterns can be chained with `or` to express alternatives
     ///
     /// Each pattern is evaluated in sequence on the same input until one succeeds. If no pattern
-    /// matches, the entire alternative chain fails, and the parser does not advance
+    /// matches, the entire alternative chain fails.
     ///
     /// # Example
     /// ```
     /// use bparse::prelude::*;
     ///
-    /// let input = b("978");
-    /// let parser = BParse::new(input);
-    ///
-    /// assert_eq!(Some(b("9")), parser.accept("0".or("7").or("9")));
-    /// assert_eq!(Some(b("7")), parser.accept("0".or("7").or("9")));
-    /// assert_eq!(None, parser.accept("0".or("7").or("9")));
+    /// assert_eq!(Some(b("9")), "0".or("7").or("9").try_match(b("978")));
     /// ```
     fn or<A>(self, next: A) -> Or<Self, A>
     where
@@ -39,18 +33,14 @@ pub trait BytePattern {
     /// Patterns can be chained with `then` to express an ordered sequence
     ///
     /// Each pattern is evaluated in sequence with remainder from the previous pattern until they
-    /// all succeed. If any pattern fails to match, the entire chain fails and the parser does not
-    /// advance
+    /// all succeed. If any pattern fails to match, the entire chain fails.
     ///
     /// # Example
     ///
     /// ```
     /// use bparse::prelude::*;
     ///
-    /// let input = b("978");
-    /// let parser = BParse::new(input);
-    ///
-    /// assert_eq!(Some(b("978")), parser.accept("9".then("7").then("8")));
+    /// assert_eq!(Some(b("978")), "9".then("7").then("8").try_match(b("978")));
     /// ```
     fn then<P>(self, next: P) -> Then<Self, P>
     where
@@ -76,23 +66,23 @@ pub struct Then<C1, C2> {
 }
 
 impl<C1: BytePattern, C2: BytePattern> BytePattern for Or<C1, C2> {
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         self.condition1
-            .matches(input)
-            .or_else(|| self.condition2.matches(input))
+            .try_match(input)
+            .or_else(|| self.condition2.try_match(input))
     }
 }
 
 impl<C1: BytePattern, C2: BytePattern> BytePattern for Then<C1, C2> {
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let mut offset = 0;
-        let Some(out) = self.condition1.matches(input) else {
+        let Some(out) = self.condition1.try_match(input) else {
             return None;
         };
 
         offset += out.len();
 
-        let Some(out) = self.condition2.matches(&input[out.len()..]) else {
+        let Some(out) = self.condition2.try_match(&input[out.len()..]) else {
             return None;
         };
 
@@ -111,14 +101,11 @@ impl<C1: BytePattern, C2: BytePattern> BytePattern for Then<C1, C2> {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// let parser = BParse::new(b("🙂hello"));
-///
-/// assert_eq!(Some(b("🙂")), parser.accept("🙂"));
-/// assert_eq!(Some(b("hello")), parser.accept("hello"));
+/// assert_eq!(Some(b("🙂")), "🙂".try_match(b("🙂")));
 ///
 /// ```
 impl BytePattern for &str {
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let bytes = self.as_bytes();
         let Some(_) = input.strip_prefix(bytes) else {
             return None;
@@ -137,12 +124,10 @@ impl BytePattern for &str {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// let parser = BParse::new(b("1234"));
-///
-/// assert_eq!(Some(b(&[0x31,0x32])), parser.accept(b("12")));
+/// assert_eq!(Some(b(&[0x31,0x32])), b("12").try_match(b("1234")));
 /// ```
 impl BytePattern for &[u8] {
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let Some(_) = input.strip_prefix(*self) else {
             return None;
         };
@@ -159,12 +144,10 @@ impl BytePattern for &[u8] {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// let parser = BParse::new(b(&[123, 7]));
-///
-/// assert_eq!(Some(b(&[123])), parser.accept(123));
+/// assert_eq!(Some(b(&[123])), 123.try_match(b(&[123])));
 /// ```
 impl BytePattern for u8 {
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         input.starts_with(&[*self]).then_some(&input[0..1])
     }
 }
@@ -176,12 +159,10 @@ impl BytePattern for u8 {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// let parser = BParse::new(b(&[123]));
-///
-/// assert_eq!(Some(b(&[123])), parser.accept(0..));
+/// assert_eq!(Some(b(&[123])), (0..).try_match(b(&[123])));
 /// ```
 impl BytePattern for RangeFrom<u8> {
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let first = *input.get(0)?;
         (first >= self.start).then_some(&input[0..1])
     }
@@ -196,11 +177,10 @@ impl BytePattern for RangeFrom<u8> {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// let parser = BParse::new(b("┦"));
-/// assert_eq!(Some(b("┦")), parser.accept('\u{2520}'..));
+/// assert_eq!(Some(b("┦")), ('\u{2520}'..).try_match(b("┦")));
 /// ```
 impl BytePattern for RangeFrom<char> {
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
 
@@ -217,11 +197,10 @@ impl BytePattern for RangeFrom<char> {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// let parser = BParse::new(&[10]);
-/// assert_eq!(Some(b(&[10])), parser.accept(..=10));
+/// assert_eq!(Some(b(&[10])), (..=10).try_match(&[10]));
 /// ```
 impl BytePattern for RangeToInclusive<u8> {
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let first = *input.get(0)?;
         (first <= self.end).then_some(&input[0..1])
     }
@@ -234,12 +213,11 @@ impl BytePattern for RangeToInclusive<u8> {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// let parser = BParse::new(b("Y"));
-/// assert_eq!(Some(b("Y")), parser.accept(..='Z'));
+/// assert_eq!(Some(b("Y")), (..='Z').try_match(b("Y")));
 ///
 /// ```
 impl BytePattern for RangeToInclusive<char> {
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
 
@@ -256,11 +234,10 @@ impl BytePattern for RangeToInclusive<char> {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// let parser = BParse::new(b("7"));
-/// assert_eq!(Some(b("7")), parser.accept(0x30..=0x39));
+/// assert_eq!(Some(b("7")), (0x30..=0x39).try_match(b("7")));
 /// ```
 impl BytePattern for RangeInclusive<u8> {
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let first = input.get(0)?;
         (first >= self.start() && first <= self.end()).then_some(&input[0..1])
     }
@@ -272,11 +249,10 @@ impl BytePattern for RangeInclusive<u8> {
 /// ```
 /// use bparse::prelude::*;
 ///
-/// let parser = BParse::new(b("d"));
-/// assert_eq!(Some(b("d")), parser.accept(0x61..=0x7A));
+/// assert_eq!(Some(b("d")), (0x61..=0x7A).try_match(b("d")));
 /// ```
 impl BytePattern for RangeInclusive<char> {
-    fn matches<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
 
