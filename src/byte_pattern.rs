@@ -14,13 +14,6 @@ pub trait BytePattern {
     ///
     /// Each pattern is evaluated in sequence on the same input until one succeeds. If no pattern
     /// matches, the entire alternative chain fails.
-    ///
-    /// # Example
-    /// ```
-    /// use bparse::prelude::*;
-    ///
-    /// assert_eq!(Some(&b"9"[..]), "0".or("7").or("9").try_match(b"978"));
-    /// ```
     fn or<A>(self, next: A) -> Or<Self, A>
     where
         Self: Sized,
@@ -35,14 +28,6 @@ pub trait BytePattern {
     ///
     /// Each pattern is evaluated in sequence with remainder from the previous pattern until they
     /// all succeed. If any pattern fails to match, the entire chain fails.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bparse::prelude::*;
-    ///
-    /// assert_eq!(Some(&b"978"[..]), "9".then("7").then("8").try_match(b"978"));
-    /// ```
     fn then<P>(self, next: P) -> Then<Self, P>
     where
         Self: Sized,
@@ -54,14 +39,6 @@ pub trait BytePattern {
     }
 
     /// Chain patterns with `.repeats()` to express ... uhh... repetition
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bparse::prelude::*;
-    ///
-    /// assert_eq!(Some(&[9,9,9][..]), 9.repeats(3).try_match(&[9, 9, 9]));
-    /// ```
     fn repeats<R: PatternRepetition>(self, count: R) -> Repeat<Self, R>
     where
         Self: Sized,
@@ -93,6 +70,10 @@ pub struct Repeat<P, R> {
     pattern: P,
     count: R,
 }
+
+/// A pattern that only matches the input if it is empty
+#[derive(Copy, Clone, Debug)]
+pub struct EndOfInput;
 
 impl<C1: BytePattern, C2: BytePattern> BytePattern for Or<C1, C2> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
@@ -154,6 +135,16 @@ impl<P: BytePattern, R: PatternRepetition> BytePattern for Repeat<P, R> {
     }
 }
 
+impl BytePattern for EndOfInput {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+        if input.is_empty() {
+            Some(input)
+        } else {
+            None
+        }
+    }
+}
+
 impl<T: BytePattern> BytePattern for &T {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         (*self).try_match(input)
@@ -168,12 +159,6 @@ impl BytePattern for &str {
         };
 
         Some(&input[..self.len()])
-    }
-}
-
-impl BytePattern for u8 {
-    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
-        input.starts_with(&[*self]).then_some(&input[0..1])
     }
 }
 

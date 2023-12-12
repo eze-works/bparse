@@ -5,9 +5,9 @@ use byte_pattern::BytePattern;
 
 /// Rexports of the parts of the crate commonly used together
 pub mod prelude {
-    pub use crate::byte_pattern::BytePattern;
+    pub use crate::byte_pattern::*;
     pub use crate::parse;
-    pub use crate::pattern_repetition::PatternRepetition;
+    pub use crate::pattern_repetition::*;
 }
 
 /// Returns a parser that will try to match `pattern`  
@@ -44,9 +44,6 @@ mod tests {
         do_test("a", b"a1b2", Some((b"a", b"1b2")));
         do_test("١", b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
 
-        // Parsing using bytes
-        do_test(97, b"a1b2", Some((b"a", b"1b2")));
-
         // Parsing using byte ranges and their references
         do_test(97.., b"a1b2", Some((b"a", b"1b2")));
         do_test(&(97..), b"a1b2", Some((b"a", b"1b2")));
@@ -64,8 +61,8 @@ mod tests {
         do_test(&('٠'..), b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
 
         // Parsing using alternatives
-        do_test("b".or(97), b"a1b2", Some((b"a", b"1b2")));
-        do_test(&("b".or(97)), b"a1b2", Some((b"a", b"1b2")));
+        do_test("b".or(97..), b"a1b2", Some((b"a", b"1b2")));
+        do_test(&("b".or(97..)), b"a1b2", Some((b"a", b"1b2")));
 
         // Parsing in sequence
         do_test("9".then("7").then("8"), b"978", Some((b"978", b"")));
