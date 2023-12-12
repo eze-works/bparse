@@ -1,18 +1,14 @@
-use crate::pattern_repetition::PatternRepetition;
+#![warn(missing_docs)]
+
+//! A library for matching patterns in byte slices
+
 use bstr::ByteSlice;
 use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
 
-mod pattern_repetition;
-mod patterns;
-
-pub mod prelude {
-    pub use crate::pattern_repetition::*;
-    pub use crate::patterns::*;
-    pub use crate::BytePattern;
-}
+pub mod pattern;
 
 /// Expresses that the implementing type can be used to match a byte slice
-pub trait BytePattern {
+pub trait Pattern {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])>;
 
     fn or<A>(self, next: A) -> Or<Self, A>
@@ -35,7 +31,7 @@ pub trait BytePattern {
         }
     }
 
-    fn repeats<R: PatternRepetition>(self, count: R) -> Repeat<Self, R>
+    fn repeats<R: Repetition>(self, count: R) -> Repeat<Self, R>
     where
         Self: Sized,
     {
@@ -93,7 +89,7 @@ pub struct Optional<P> {
     pattern: P,
 }
 
-impl<C1: BytePattern, C2: BytePattern> BytePattern for Or<C1, C2> {
+impl<C1: Pattern, C2: Pattern> Pattern for Or<C1, C2> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         self.pattern1
             .test(input)
@@ -101,7 +97,7 @@ impl<C1: BytePattern, C2: BytePattern> BytePattern for Or<C1, C2> {
     }
 }
 
-impl<C1: BytePattern, C2: BytePattern> BytePattern for Then<C1, C2> {
+impl<C1: Pattern, C2: Pattern> Pattern for Then<C1, C2> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut offset = 0;
         let Some((value, rest)) = self.pattern1.test(input) else {
@@ -120,7 +116,7 @@ impl<C1: BytePattern, C2: BytePattern> BytePattern for Then<C1, C2> {
     }
 }
 
-impl<P: BytePattern, R: PatternRepetition> BytePattern for Repeat<P, R> {
+impl<P: Pattern, R: Repetition> Pattern for Repeat<P, R> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut counter = 0;
         let mut offset = 0;
@@ -153,9 +149,9 @@ impl<P: BytePattern, R: PatternRepetition> BytePattern for Repeat<P, R> {
     }
 }
 
-impl<P> BytePattern for Peek<P>
+impl<P> Pattern for Peek<P>
 where
-    P: BytePattern,
+    P: Pattern,
 {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let Some((value, _)) = self.pattern.test(input) else {
@@ -166,16 +162,16 @@ where
     }
 }
 
-impl<P> BytePattern for Optional<P>
+impl<P> Pattern for Optional<P>
 where
-    P: BytePattern,
+    P: Pattern,
 {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         self.pattern.test(input).or(Some((b"", input)))
     }
 }
 
-impl<F> BytePattern for F
+impl<F> Pattern for F
 where
     F: Fn(&[u8]) -> Option<(&[u8], &[u8])>,
 {
@@ -184,7 +180,7 @@ where
     }
 }
 
-impl BytePattern for &str {
+impl Pattern for &str {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let bytes = self.as_bytes();
         let Some(_) = input.strip_prefix(bytes) else {
@@ -195,14 +191,14 @@ impl BytePattern for &str {
     }
 }
 
-impl BytePattern for RangeFrom<u8> {
+impl Pattern for RangeFrom<u8> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let first = *input.get(0)?;
         (first >= self.start).then_some((&input[0..1], &input[1..]))
     }
 }
 
-impl BytePattern for RangeFrom<char> {
+impl Pattern for RangeFrom<char> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
@@ -213,14 +209,14 @@ impl BytePattern for RangeFrom<char> {
     }
 }
 
-impl BytePattern for RangeToInclusive<u8> {
+impl Pattern for RangeToInclusive<u8> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let first = *input.get(0)?;
         (first <= self.end).then_some((&input[0..1], &input[1..]))
     }
 }
 
-impl BytePattern for RangeToInclusive<char> {
+impl Pattern for RangeToInclusive<char> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
@@ -231,14 +227,14 @@ impl BytePattern for RangeToInclusive<char> {
     }
 }
 
-impl BytePattern for RangeInclusive<u8> {
+impl Pattern for RangeInclusive<u8> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let first = input.get(0)?;
         (first >= self.start() && first <= self.end()).then_some((&input[0..1], &input[1..]))
     }
 }
 
-impl BytePattern for RangeInclusive<char> {
+impl Pattern for RangeInclusive<char> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
@@ -250,12 +246,80 @@ impl BytePattern for RangeInclusive<char> {
     }
 }
 
+/// Trait used to specify start and end bounds for pattern repetitions
+///
+/// Unlike the standard library's [`std::ops::RangeBounds`],
+///
+/// 1. this trait cannot express an unbounded lower bound
+/// 2. this trait's bounds are always inclusive
+///
+/// # Examples
+///
+/// ```
+/// use bparse::Repetition;
+///
+/// assert_eq!(3.lower_bound(), 3);
+/// assert_eq!(3.upper_bound(), Some(3));
+///
+/// assert_eq!((2..=4).lower_bound(), 2);
+/// assert_eq!((2..=4).upper_bound(), Some(4));
+///
+/// assert_eq!((..=10).lower_bound(), 0);
+/// assert_eq!((..=10).upper_bound(), Some(10));
+///
+/// assert_eq!((3..).lower_bound(), 3);
+/// assert_eq!((3..).upper_bound(), None);
+/// ```
+pub trait Repetition {
+    /// The minimum amount of times a pattern should repeat
+    fn lower_bound(&self) -> usize;
+
+    /// The maxiumum amount of times a pattern should repeat, possibly unbounded.
+    fn upper_bound(&self) -> Option<usize>;
+}
+
+impl Repetition for usize {
+    fn lower_bound(&self) -> usize {
+        *self
+    }
+    fn upper_bound(&self) -> Option<usize> {
+        Some(*self)
+    }
+}
+
+impl Repetition for RangeInclusive<usize> {
+    fn lower_bound(&self) -> usize {
+        *self.start()
+    }
+    fn upper_bound(&self) -> Option<usize> {
+        Some(*self.end())
+    }
+}
+
+impl Repetition for RangeToInclusive<usize> {
+    fn lower_bound(&self) -> usize {
+        0
+    }
+    fn upper_bound(&self) -> Option<usize> {
+        Some(self.end)
+    }
+}
+
+impl Repetition for RangeFrom<usize> {
+    fn lower_bound(&self) -> usize {
+        self.start
+    }
+    fn upper_bound(&self) -> Option<usize> {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
+    use super::*;
 
     fn do_test(
-        pattern: impl BytePattern,
+        pattern: impl Pattern,
         input: &'static [u8],
         result: Option<(&'static [u8], &'static [u8])>,
     ) {
@@ -312,19 +376,19 @@ mod tests {
     #[test]
     fn test_builtin_patterns() {
         do_test(
-            digit.repeats(0..),
+            pattern::digit.repeats(0..),
             b"0123456789",
             Some((b"0123456789", b"")),
         );
 
         do_test(
-            alpha.repeats(0..),
+            pattern::alpha.repeats(0..),
             b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
             Some((b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", b"")),
         );
 
         do_test(
-            hex.repeats(0..),
+            pattern::hex.repeats(0..),
             b"abcdefABCDEF0123456789",
             Some((b"abcdefABCDEF0123456789", b"")),
         );
