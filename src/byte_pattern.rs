@@ -1,6 +1,7 @@
 //! Condition traits
 //!
 
+use crate::pattern_repetition::PatternRepetition;
 use bstr::ByteSlice;
 use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
 
@@ -9,7 +10,7 @@ pub trait BytePattern {
     /// Returns the slice of the input that is recognized, if any
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]>;
 
-    /// Patterns can be chained with `or` to express alternatives
+    /// Chain patterns with `.or()` to express alternatives
     ///
     /// Each pattern is evaluated in sequence on the same input until one succeeds. If no pattern
     /// matches, the entire alternative chain fails.
@@ -25,12 +26,12 @@ pub trait BytePattern {
         Self: Sized,
     {
         Or {
-            condition1: self,
-            condition2: next,
+            pattern1: self,
+            pattern2: next,
         }
     }
 
-    /// Patterns can be chained with `then` to express an ordered sequence
+    /// Chain patterns with `.then()` to express an ordered sequence
     ///
     /// Each pattern is evaluated in sequence with remainder from the previous pattern until they
     /// all succeed. If any pattern fails to match, the entire chain fails.
@@ -47,8 +48,27 @@ pub trait BytePattern {
         Self: Sized,
     {
         Then {
-            condition1: self,
-            condition2: next,
+            pattern1: self,
+            pattern2: next,
+        }
+    }
+
+    /// Chain patterns with `.repeats()` to express ... uhh... repetition
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use bparse::prelude::*;
+    ///
+    /// assert_eq!(Some(&[9,9,9][..]), 9.repeats(3).try_match(&[9, 9, 9]));
+    /// ```
+    fn repeats<R: PatternRepetition>(self, count: R) -> Repeat<Self, R>
+    where
+        Self: Sized,
+    {
+        Repeat {
+            pattern: self,
+            count,
         }
     }
 }
@@ -56,41 +76,81 @@ pub trait BytePattern {
 /// See [`BytePattern::or`]
 #[derive(Clone, Copy, Debug)]
 pub struct Or<C1, C2> {
-    condition1: C1,
-    condition2: C2,
+    pattern1: C1,
+    pattern2: C2,
 }
 
 /// See [`BytePattern::then`]
 #[derive(Clone, Copy, Debug)]
 pub struct Then<C1, C2> {
-    condition1: C1,
-    condition2: C2,
+    pattern1: C1,
+    pattern2: C2,
+}
+
+/// See [`BytePattern::repeats`]
+#[derive(Clone, Copy, Debug)]
+pub struct Repeat<P, R> {
+    pattern: P,
+    count: R,
 }
 
 impl<C1: BytePattern, C2: BytePattern> BytePattern for Or<C1, C2> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
-        self.condition1
+        self.pattern1
             .try_match(input)
-            .or_else(|| self.condition2.try_match(input))
+            .or_else(|| self.pattern2.try_match(input))
     }
 }
 
 impl<C1: BytePattern, C2: BytePattern> BytePattern for Then<C1, C2> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let mut offset = 0;
-        let Some(out) = self.condition1.try_match(input) else {
+        let Some(out) = self.pattern1.try_match(input) else {
             return None;
         };
 
         offset += out.len();
 
-        let Some(out) = self.condition2.try_match(&input[out.len()..]) else {
+        let Some(out) = self.pattern2.try_match(&input[out.len()..]) else {
             return None;
         };
 
         offset += out.len();
 
         Some(&input[..offset])
+    }
+}
+
+impl<P: BytePattern, R: PatternRepetition> BytePattern for Repeat<P, R> {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+        let mut counter = 0;
+        let mut offset = 0;
+        let lower_bound = self.count.lower_bound();
+        if let Some(upper_bound) = self.count.upper_bound() {
+            assert!(
+                upper_bound >= lower_bound,
+                "upper bound should be greater than or equal to the lower bound"
+            );
+        };
+
+        loop {
+            // We hit the upper bound of pattern repetition
+            if let Some(upper_bound) = self.count.upper_bound() {
+                if counter == upper_bound {
+                    return Some(&input[..offset]);
+                }
+            };
+
+            let Some(v) = self.pattern.try_match(&input[offset..]) else {
+                if counter < lower_bound {
+                    return None;
+                }
+                return Some(&input[..offset]);
+            };
+
+            counter += 1;
+            offset += v.len();
+        }
     }
 }
 

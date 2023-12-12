@@ -19,12 +19,12 @@ pub struct Color {
 }
 
 fn hex_color(input: &str) -> Option<Color> {
-  let hexdigit = ('0'..='9').or('a'..='f').or('A'..='F');
+  let hexbyte = ('0'..='9').or('a'..='f').or('A'..='F').repeats(2);
 
-  let (_, rest) = parse("#", 1)(input.as_bytes())?;
-  let (red, rest) = parse(&hexdigit, 2)(rest)?;
-  let (green, rest) = parse(&hexdigit, 2)(rest)?;
-  let (blue, rest) = parse(&hexdigit, 2)(rest)?;
+  let (_, rest) = parse("#")(input.as_bytes())?;
+  let (red, rest) = parse(&hexbyte)(rest)?;
+  let (green, rest) = parse(&hexbyte)(rest)?;
+  let (blue, rest) = parse(&hexbyte)(rest)?;
 
   Some(Color {
     red: u8::from_str_radix(from_utf8(red).unwrap(), 16).unwrap(),
