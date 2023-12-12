@@ -8,7 +8,7 @@ use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
 pub mod pattern;
 
 /// Expresses that the implementing type can be used to match a byte slice
-pub trait Pattern {
+pub trait BytePattern {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])>;
 
     fn or<A>(self, next: A) -> Or<Self, A>
@@ -89,7 +89,7 @@ pub struct Optional<P> {
     pattern: P,
 }
 
-impl<C1: Pattern, C2: Pattern> Pattern for Or<C1, C2> {
+impl<C1: BytePattern, C2: BytePattern> BytePattern for Or<C1, C2> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         self.pattern1
             .test(input)
@@ -97,7 +97,7 @@ impl<C1: Pattern, C2: Pattern> Pattern for Or<C1, C2> {
     }
 }
 
-impl<C1: Pattern, C2: Pattern> Pattern for Then<C1, C2> {
+impl<C1: BytePattern, C2: BytePattern> BytePattern for Then<C1, C2> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut offset = 0;
         let Some((value, rest)) = self.pattern1.test(input) else {
@@ -116,7 +116,7 @@ impl<C1: Pattern, C2: Pattern> Pattern for Then<C1, C2> {
     }
 }
 
-impl<P: Pattern, R: Repetition> Pattern for Repeat<P, R> {
+impl<P: BytePattern, R: Repetition> BytePattern for Repeat<P, R> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut counter = 0;
         let mut offset = 0;
@@ -149,9 +149,9 @@ impl<P: Pattern, R: Repetition> Pattern for Repeat<P, R> {
     }
 }
 
-impl<P> Pattern for Peek<P>
+impl<P> BytePattern for Peek<P>
 where
-    P: Pattern,
+    P: BytePattern,
 {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let Some((value, _)) = self.pattern.test(input) else {
@@ -162,16 +162,16 @@ where
     }
 }
 
-impl<P> Pattern for Optional<P>
+impl<P> BytePattern for Optional<P>
 where
-    P: Pattern,
+    P: BytePattern,
 {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         self.pattern.test(input).or(Some((b"", input)))
     }
 }
 
-impl<F> Pattern for F
+impl<F> BytePattern for F
 where
     F: Fn(&[u8]) -> Option<(&[u8], &[u8])>,
 {
@@ -180,7 +180,7 @@ where
     }
 }
 
-impl Pattern for &str {
+impl BytePattern for &str {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let bytes = self.as_bytes();
         let Some(_) = input.strip_prefix(bytes) else {
@@ -191,14 +191,14 @@ impl Pattern for &str {
     }
 }
 
-impl Pattern for RangeFrom<u8> {
+impl BytePattern for RangeFrom<u8> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let first = *input.get(0)?;
         (first >= self.start).then_some((&input[0..1], &input[1..]))
     }
 }
 
-impl Pattern for RangeFrom<char> {
+impl BytePattern for RangeFrom<char> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
@@ -209,14 +209,14 @@ impl Pattern for RangeFrom<char> {
     }
 }
 
-impl Pattern for RangeToInclusive<u8> {
+impl BytePattern for RangeToInclusive<u8> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let first = *input.get(0)?;
         (first <= self.end).then_some((&input[0..1], &input[1..]))
     }
 }
 
-impl Pattern for RangeToInclusive<char> {
+impl BytePattern for RangeToInclusive<char> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
@@ -227,14 +227,14 @@ impl Pattern for RangeToInclusive<char> {
     }
 }
 
-impl Pattern for RangeInclusive<u8> {
+impl BytePattern for RangeInclusive<u8> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let first = input.get(0)?;
         (first >= self.start() && first <= self.end()).then_some((&input[0..1], &input[1..]))
     }
 }
 
-impl Pattern for RangeInclusive<char> {
+impl BytePattern for RangeInclusive<char> {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
@@ -319,7 +319,7 @@ mod tests {
     use super::*;
 
     fn do_test(
-        pattern: impl Pattern,
+        pattern: impl BytePattern,
         input: &'static [u8],
         result: Option<(&'static [u8], &'static [u8])>,
     ) {
