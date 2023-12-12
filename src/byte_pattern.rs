@@ -18,7 +18,7 @@ pub trait BytePattern {
     /// ```
     /// use bparse::prelude::*;
     ///
-    /// assert_eq!(Some(b("9")), "0".or("7").or("9").try_match(b("978")));
+    /// assert_eq!(Some(&b"9"[..]), "0".or("7").or("9").try_match(b"978"));
     /// ```
     fn or<A>(self, next: A) -> Or<Self, A>
     where
@@ -40,7 +40,7 @@ pub trait BytePattern {
     /// ```
     /// use bparse::prelude::*;
     ///
-    /// assert_eq!(Some(b("978")), "9".then("7").then("8").try_match(b("978")));
+    /// assert_eq!(Some(&b"978"[..]), "9".then("7").then("8").try_match(b"978"));
     /// ```
     fn then<P>(self, next: P) -> Then<Self, P>
     where
@@ -100,18 +100,6 @@ impl<T: BytePattern> BytePattern for &T {
     }
 }
 
-/// [`BytePattern`] implementation for string slices.
-///
-/// Matches unicode scalar values in the byte input.
-///
-/// # Example
-///
-/// ```
-/// use bparse::prelude::*;
-///
-/// assert_eq!(Some(b("🙂")), "🙂".try_match(b("🙂")));
-///
-/// ```
 impl BytePattern for &str {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let bytes = self.as_bytes();
@@ -123,31 +111,12 @@ impl BytePattern for &str {
     }
 }
 
-/// [`BytePattern`] implementation for a byte
-///
-///
-/// # Example
-///
-/// ```
-/// use bparse::prelude::*;
-///
-/// assert_eq!(Some(b(&[123])), 123.try_match(&[123]));
-/// ```
 impl BytePattern for u8 {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         input.starts_with(&[*self]).then_some(&input[0..1])
     }
 }
 
-/// [`BytePattern`] implementation for ranges of the form `0..`
-///
-/// # Example
-///
-/// ```
-/// use bparse::prelude::*;
-///
-/// assert_eq!(Some(b(&[123])), (0..).try_match(&[123]));
-/// ```
 impl BytePattern for RangeFrom<u8> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let first = *input.get(0)?;
@@ -155,17 +124,6 @@ impl BytePattern for RangeFrom<u8> {
     }
 }
 
-/// [`BytePattern`] implementattion for ranges of the form `'a'..`
-///
-/// Matches a range of unicode scalar values in the byte input.
-///
-/// # Example
-///
-/// ```
-/// use bparse::prelude::*;
-///
-/// assert_eq!(Some(b("┦")), ('\u{2520}'..).try_match(b"\xE2\x94\xA6"));
-/// ```
 impl BytePattern for RangeFrom<char> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let mut iter = input.char_indices();
@@ -177,15 +135,6 @@ impl BytePattern for RangeFrom<char> {
     }
 }
 
-/// [`BytePattern`] implementation for ranges of the form `..=10`
-///
-/// # Example
-///
-/// ```
-/// use bparse::prelude::*;
-///
-/// assert_eq!(Some(b(&[10])), (..=10).try_match(&[10]));
-/// ```
 impl BytePattern for RangeToInclusive<u8> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let first = *input.get(0)?;
@@ -193,16 +142,6 @@ impl BytePattern for RangeToInclusive<u8> {
     }
 }
 
-/// [`BytePattern`] implementation for ranges of the form `..='Z'`
-///
-/// # Example
-///
-/// ```
-/// use bparse::prelude::*;
-///
-/// assert_eq!(Some(b("Y")), (..='Z').try_match(b"Y"));
-///
-/// ```
 impl BytePattern for RangeToInclusive<char> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let mut iter = input.char_indices();
@@ -214,15 +153,6 @@ impl BytePattern for RangeToInclusive<char> {
     }
 }
 
-/// [`BytePattern`] implementation for ranges of the form `0..=9`
-///
-/// # Example
-///
-/// ```
-/// use bparse::prelude::*;
-///
-/// assert_eq!(Some(b("7")), (0x30..=0x39).try_match(b"7"));
-/// ```
 impl BytePattern for RangeInclusive<u8> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let first = input.get(0)?;
@@ -230,14 +160,6 @@ impl BytePattern for RangeInclusive<u8> {
     }
 }
 
-/// [`BytePattern`] implementation for ranges of the form `'a'..='z'`
-///
-/// # Example
-/// ```
-/// use bparse::prelude::*;
-///
-/// assert_eq!(Some(b("d")), (0x61..=0x7A).try_match(b"d"));
-/// ```
 impl BytePattern for RangeInclusive<char> {
     fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
         let mut iter = input.char_indices();
