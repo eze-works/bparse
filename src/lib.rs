@@ -3,14 +3,15 @@ use bstr::ByteSlice;
 use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
 
 mod pattern_repetition;
-/// Rexports of the parts of the crate commonly used together
+mod patterns;
+
 pub mod prelude {
-    pub use crate::end;
     pub use crate::pattern_repetition::*;
+    pub use crate::patterns::*;
     pub use crate::BytePattern;
 }
 
-/// Expresses that the implementing type can be used as a condition for matching a byte slice
+/// Expresses that the implementing type can be used to match a byte slice
 pub trait BytePattern {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])>;
 
@@ -43,6 +44,13 @@ pub trait BytePattern {
             count,
         }
     }
+
+    fn peek(self) -> Peek<Self>
+    where
+        Self: Sized,
+    {
+        Peek { pattern: self }
+    }
 }
 
 /// See [`BytePattern::or`]
@@ -66,13 +74,10 @@ pub struct Repeat<P, R> {
     count: R,
 }
 
-/// A pattern that only matches the input if it is empty
-pub fn end(input: &[u8]) -> Option<(&[u8], &[u8])> {
-    if input.is_empty() {
-        Some((&[], input))
-    } else {
-        None
-    }
+/// See [`BytePattern::peek`]
+#[derive(Clone, Copy, Debug)]
+pub struct Peek<P> {
+    pattern: P,
 }
 
 impl<C1: BytePattern, C2: BytePattern> BytePattern for Or<C1, C2> {
@@ -132,6 +137,19 @@ impl<P: BytePattern, R: PatternRepetition> BytePattern for Repeat<P, R> {
             counter += 1;
             offset += value.len();
         }
+    }
+}
+
+impl<P> BytePattern for Peek<P>
+where
+    P: BytePattern,
+{
+    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+        let Some((value, _)) = self.pattern.test(input) else {
+            return None;
+        };
+
+        Some((value, input))
     }
 }
 
@@ -212,7 +230,8 @@ impl BytePattern for RangeInclusive<char> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::prelude::*;
+
     fn do_test(
         pattern: impl BytePattern,
         input: &'static [u8],
@@ -245,6 +264,9 @@ mod tests {
         // Parsing in sequence
         do_test("9".then("7").then("8"), b"978", Some((b"978", b"")));
 
+        // Peeking ahead
+        do_test(('a'..='b').peek(), b"a1b2", Some((b"a", b"a1b2")));
+
         // Parsing using functions
         fn parse_a(input: &[u8]) -> Option<(&[u8], &[u8])> {
             let first = input.get(0)?;
@@ -259,6 +281,27 @@ mod tests {
         }
 
         do_test(parse_a.then(parse_1), b"a1b2", Some((b"a1", b"b2")))
+    }
+
+    #[test]
+    fn test_builtin_patterns() {
+        do_test(
+            digit.repeats(0..),
+            b"0123456789",
+            Some((b"0123456789", b"")),
+        );
+
+        do_test(
+            alpha.repeats(0..),
+            b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+            Some((b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", b"")),
+        );
+
+        do_test(
+            hex.repeats(0..),
+            b"abcdefABCDEF0123456789",
+            Some((b"abcdefABCDEF0123456789", b"")),
+        );
     }
 
     #[test]
