@@ -9,18 +9,49 @@ pub mod pattern;
 
 /// Expresses that the implementing type can be used to match a byte slice
 pub trait BytePattern {
+    /// Tests the pattern against the input slice. If the pattern matches, the matching part is
+    /// returned along with what is left of the input. Returns `None` if the pattern does not match
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])>;
 
-    fn or<A>(self, next: A) -> Or<Self, A>
+    /// Expresses an alternate pattern.
+    ///
+    /// Returns a new pattern that will match an input slice if either `self` or `other` match it.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use bparse::BytePattern;
+    ///
+    /// let input = b"b";
+    /// let pattern = "a".or("b");
+    ///
+    /// assert_eq!(b"b", pattern.test(input).unwrap().0);
+    /// ```
+    fn or<P>(self, other: P) -> Or<Self, P>
     where
         Self: Sized,
     {
         Or {
             pattern1: self,
-            pattern2: next,
+            pattern2: other,
         }
     }
 
+    /// Expreses a sequence of patterns
+    ///
+    /// Returns a new pattern that will match an input slice if `self` matches it, and `other`
+    /// matches the rest.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use bparse::BytePattern;
+    ///
+    /// let input = b"abc";
+    /// let pattern = "a".then("b").then("c");
+    ///
+    /// assert_eq!(b"abc", pattern.test(input).unwrap().0);
+    /// ```
     fn then<P>(self, next: P) -> Then<Self, P>
     where
         Self: Sized,
@@ -31,6 +62,20 @@ pub trait BytePattern {
         }
     }
 
+    /// Expresses pattern repetition
+    ///
+    /// Returns a new pattern that will match an input slice if `self` can match `count` times
+    ///
+    /// See [`Repetition`] for more examples of types that implement it.
+    ///
+    /// ```
+    /// use bparse::BytePattern;
+    ///
+    /// let input = b"ababab";
+    /// let pattern = "a".then("b").repeats(1..=2);
+    ///
+    /// assert_eq!(b"abab", pattern.test(input).unwrap().0);
+    /// ```
     fn repeats<R: Repetition>(self, count: R) -> Repeat<Self, R>
     where
         Self: Sized,
@@ -41,13 +86,54 @@ pub trait BytePattern {
         }
     }
 
-    fn peek(self) -> Peek<Self>
+    /// Expresses pattern negation
+    ///
+    /// Returns a new pattern that will match only if `self` does not match
+    ///
+    /// # Example
+    ///
+    /// Say you want to match a string of multiple 'a's and 'b's, except the string must not end in
+    /// a 'b':
+    /// ```
+    /// use bparse::BytePattern;
+    /// use bparse::pattern::end;
+    ///
+    /// let input1 = b"aabaaaa";
+    /// let input2 = b"aaaab";
+    ///
+    /// // a pattern of either a's or b's that do not occur at the input
+    /// let pattern = "a".or("b".then(end.not())).repeats(0..);
+    ///
+    /// assert_eq!(b"aabaaaa", pattern.test(input1).unwrap().0);
+    /// assert_eq!(b"aaaa", pattern.test(input2).unwrap().0);
+    ///
+    ///
+    /// ```
+    fn not(self) -> Not<Self>
     where
         Self: Sized,
     {
-        Peek { pattern: self }
+        Not { pattern: self }
     }
 
+    /// Expresses an optional pattern
+    ///
+    /// Returns a new pattern that will always match the input regardless of the outcome of
+    /// matching `self`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use bparse::BytePattern;
+    ///
+    /// let input1 = b"aab";
+    /// let input2 = b"aa";
+    ///
+    /// let pattern = "aa".then("b".optional());
+    ///
+    /// assert_eq!(b"aab", pattern.test(input1).unwrap().0);
+    /// assert_eq!(b"aa", pattern.test(input2).unwrap().0);
+    /// ```
     fn optional(self) -> Optional<Self>
     where
         Self: Sized,
@@ -77,9 +163,9 @@ pub struct Repeat<P, R> {
     count: R,
 }
 
-/// See [`BytePattern::peek`]
+/// See [`BytePattern::not`]
 #[derive(Clone, Copy, Debug)]
-pub struct Peek<P> {
+pub struct Not<P> {
     pattern: P,
 }
 
@@ -149,16 +235,16 @@ impl<P: BytePattern, R: Repetition> BytePattern for Repeat<P, R> {
     }
 }
 
-impl<P> BytePattern for Peek<P>
+impl<P> BytePattern for Not<P>
 where
     P: BytePattern,
 {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
-        let Some((value, _)) = self.pattern.test(input) else {
+        if self.pattern.test(input).is_some() {
             return None;
         };
 
-        Some((value, input))
+        Some((b"", input))
     }
 }
 
@@ -350,8 +436,8 @@ mod tests {
         // Parsing in sequence
         do_test("9".then("7").then("8"), b"978", Some((b"978", b"")));
 
-        // Peeking ahead
-        do_test(('a'..='b').peek(), b"a1b2", Some((b"a", b"a1b2")));
+        // Negating a pattern
+        do_test(('0'..='9').not(), b"a1b2", Some((b"", b"a1b2")));
 
         // Optional
         do_test(" ".optional().then("a"), b"a1b2", Some((b"a", b"1b2")));
