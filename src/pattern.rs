@@ -1,4 +1,4 @@
-use crate::BytePattern;
+use crate::Pattern;
 
 pub fn end(input: &[u8]) -> Option<(&[u8], &[u8])> {
     if input.is_empty() {
