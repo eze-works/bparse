@@ -2,9 +2,7 @@ use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
 
 /// Trait used to specify start and end bounds
 pub trait PatternRepetition {
-    /// The lower bound
     fn lower_bound(&self) -> usize;
-    /// The upper bound, potentially unbounded
     fn upper_bound(&self) -> Option<usize>;
 }
 
@@ -41,5 +39,15 @@ impl PatternRepetition for RangeFrom<usize> {
     }
     fn upper_bound(&self) -> Option<usize> {
         None
+    }
+}
+
+impl<T: PatternRepetition> PatternRepetition for &T {
+    fn lower_bound(&self) -> usize {
+        (*self).lower_bound()
+    }
+
+    fn upper_bound(&self) -> Option<usize> {
+        (*self).upper_bound()
     }
 }

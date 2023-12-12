@@ -54,12 +54,14 @@ pub trait BytePattern {
 }
 
 /// See [`BytePattern::or`]
+#[derive(Clone, Copy, Debug)]
 pub struct Or<C1, C2> {
     condition1: C1,
     condition2: C2,
 }
 
 /// See [`BytePattern::then`]
+#[derive(Clone, Copy, Debug)]
 pub struct Then<C1, C2> {
     condition1: C1,
     condition2: C2,
@@ -89,6 +91,12 @@ impl<C1: BytePattern, C2: BytePattern> BytePattern for Then<C1, C2> {
         offset += out.len();
 
         Some(&input[..offset])
+    }
+}
+
+impl<T: BytePattern> BytePattern for &T {
+    fn try_match<'i>(&self, input: &'i [u8]) -> Option<&'i [u8]> {
+        (*self).try_match(input)
     }
 }
 

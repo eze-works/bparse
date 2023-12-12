@@ -79,23 +79,37 @@ mod tests {
 
     #[test]
     fn test_parse_patterns() {
-        // Parsing string slices
-        do_test("", 1, b"a1b2", Some((b"", b"a1b2")));
-
         // Parsing using string slices
+        do_test("", 1, b"a1b2", Some((b"", b"a1b2")));
         do_test("a", 1, b"a1b2", Some((b"a", b"1b2")));
-
-        // Parsing using byte ranges
-        do_test(97, 1, b"a1b2", Some((b"a", b"1b2")));
-        do_test(97.., 1, b"a1b2", Some((b"a", b"1b2")));
-        do_test(..=97, 1, b"a1b2", Some((b"a", b"1b2")));
-        do_test(96..=98, 1, b"a1b2", Some((b"a", b"1b2")));
-
-        // Parsing using char ranges
         do_test("١", 1, b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
+
+        // Parsing using bytes
+        do_test(97, 1, b"a1b2", Some((b"a", b"1b2")));
+
+        // Parsing using byte ranges and their references
+        do_test(97.., 1, b"a1b2", Some((b"a", b"1b2")));
+        do_test(&(97..), 1, b"a1b2", Some((b"a", b"1b2")));
+        do_test(..=97, 1, b"a1b2", Some((b"a", b"1b2")));
+        do_test(&(..=97), 1, b"a1b2", Some((b"a", b"1b2")));
+        do_test(96..=98, 1, b"a1b2", Some((b"a", b"1b2")));
+        do_test(&(96..=98), 1, b"a1b2", Some((b"a", b"1b2")));
+
+        // Parsing using char ranges and their references
         do_test('٠'..='٩', 1, b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
+        do_test(&('٠'..='٩'), 1, b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
         do_test(..='٩', 1, b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
+        do_test(&(..='٩'), 1, b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
         do_test('٠'.., 1, b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
+        do_test(&('٠'..), 1, b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
+
+        // Parsing using alternatives
+        do_test("b".or(97), 1, b"a1b2", Some((b"a", b"1b2")));
+        do_test(&("b".or(97)), 1, b"a1b2", Some((b"a", b"1b2")));
+
+        // Parsing in sequence
+        do_test("9".then("7").then("8"), 1, b"978", Some((b"978", b"")));
+        do_test(&("9".then("7").then("8")), 1, b"978", Some((b"978", b"")));
     }
 
     #[test]
@@ -116,6 +130,11 @@ mod tests {
         do_test("a", ..=0, b"aaabb", Some((b"", b"aaabb")));
         do_test("a", ..=1, b"aaabb", Some((b"a", b"aabb")));
         do_test("a", ..=10, b"aaabb", Some((b"aaa", b"bb")));
+
+        // References to bounds also work
+        do_test("a", &(0..=0), b"aabb", Some((b"", b"aabb")));
+        do_test("a", &(0..), b"aaaab", Some((b"aaaa", b"b")));
+        do_test("a", &(..=3), b"bb", Some((b"", b"bb")));
     }
 }
 
