@@ -26,7 +26,7 @@ fn hex_color(input: &str) -> Option<Color> {
 
   let (red, rest) = hexbyte.test(rest)?;
   let (green, rest) = hexbyte.test(rest)?;
-  let (blue, rest) = hexbyte.then(end).test(rest)?;
+  let (blue, _) = hexbyte.then(end).test(rest)?;
 
   Some(Color {
     red: u8::from_str_radix(from_utf8(red).unwrap(), 16).unwrap(),

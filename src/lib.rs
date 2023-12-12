@@ -51,6 +51,13 @@ pub trait BytePattern {
     {
         Peek { pattern: self }
     }
+
+    fn optional(self) -> Optional<Self>
+    where
+        Self: Sized,
+    {
+        Optional { pattern: self }
+    }
 }
 
 /// See [`BytePattern::or`]
@@ -77,6 +84,12 @@ pub struct Repeat<P, R> {
 /// See [`BytePattern::peek`]
 #[derive(Clone, Copy, Debug)]
 pub struct Peek<P> {
+    pattern: P,
+}
+
+/// See [`BytePattern::optional`]
+#[derive(Clone, Copy, Debug)]
+pub struct Optional<P> {
     pattern: P,
 }
 
@@ -150,6 +163,15 @@ where
         };
 
         Some((value, input))
+    }
+}
+
+impl<P> BytePattern for Optional<P>
+where
+    P: BytePattern,
+{
+    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+        self.pattern.test(input).or(Some((b"", input)))
     }
 }
 
@@ -266,6 +288,10 @@ mod tests {
 
         // Peeking ahead
         do_test(('a'..='b').peek(), b"a1b2", Some((b"a", b"a1b2")));
+
+        // Optional
+        do_test(" ".optional().then("a"), b"a1b2", Some((b"a", b"1b2")));
+        do_test(" ".optional().then("a"), b" a1b2", Some((b" a", b"1b2")));
 
         // Parsing using functions
         fn parse_a(input: &[u8]) -> Option<(&[u8], &[u8])> {
