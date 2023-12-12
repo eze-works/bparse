@@ -41,13 +41,3 @@ impl PatternRepetition for RangeFrom<usize> {
         None
     }
 }
-
-impl<T: PatternRepetition> PatternRepetition for &T {
-    fn lower_bound(&self) -> usize {
-        (*self).lower_bound()
-    }
-
-    fn upper_bound(&self) -> Option<usize> {
-        (*self).upper_bound()
-    }
-}

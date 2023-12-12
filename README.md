@@ -22,11 +22,11 @@ fn hex_color(input: &str) -> Option<Color> {
   let hexbyte = ('0'..='9').or('a'..='f').or('A'..='F').repeats(2);
   // let hexbyte = ['0', '9'].or(['a', 'f']).or(['A', 'F']).repeats(2);
 
-  let (_, rest) = parse("#")(input.as_bytes())?;
+  let (_, rest) = "#".test(input.as_bytes())?;
 
-  let (red, rest) = parse(&hexbyte)(rest)?;
-  let (green, rest) = parse(&hexbyte)(rest)?;
-  let (blue, rest) = parse(&hexbyte.then(EndOfInput))(rest)?;
+  let (red, rest) = hexbyte.test(rest)?;
+  let (green, rest) = hexbyte.test(rest)?;
+  let (blue, rest) = hexbyte.then(end).test(rest)?;
 
   Some(Color {
     red: u8::from_str_radix(from_utf8(red).unwrap(), 16).unwrap(),
