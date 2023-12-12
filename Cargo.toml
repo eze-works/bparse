@@ -2,8 +2,12 @@
 name = "bparse"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+readme = "README.md"
+description = "A library parsing bytes"
+repository = "https://gitlab.com/wake-sleeper/bparse"
+keywords = ["parser", "bytes"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 bstr = "1.8.0"
