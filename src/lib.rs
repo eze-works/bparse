@@ -478,6 +478,12 @@ mod tests {
             b"abcdefABCDEF0123456789",
             Some((b"abcdefABCDEF0123456789", b"")),
         );
+
+        do_test(
+            pattern::byteset("&@*%#!?").repeats(0..),
+            b"#!q",
+            Some((b"#!", b"q")),
+        );
     }
 
     #[test]

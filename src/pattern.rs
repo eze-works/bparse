@@ -59,3 +59,31 @@ pub fn alpha(input: &[u8]) -> Option<(&[u8], &[u8])> {
 pub fn hex(input: &[u8]) -> Option<(&[u8], &[u8])> {
     ('a'..='f').or('A'..='F').or(digit).test(input)
 }
+
+/// Returns a pattern that will match any one of the bytes in `alternatives`
+///
+/// This is a useful alternative to a long `BytePattern::or()` chain when you have many
+/// alternatives.
+///
+/// # Example
+///
+/// ```
+/// use bparse::{BytePattern, pattern};
+///
+/// let punctuation = pattern::byteset(".,\"'-?:!;");
+/// assert_eq!(punctuation.test(b"!"), Some((&b"!"[..], &[][..])));
+/// assert_eq!(punctuation.test(b","), Some((&b","[..], &[][..])));
+/// assert_eq!(punctuation.test(b"a"), None);
+/// ```
+pub fn byteset(alternatives: &str) -> impl Fn(&[u8]) -> Option<(&[u8], &[u8])> {
+    let mut set: [bool; 256] = [false; 256];
+
+    for &byte in alternatives.as_bytes() {
+        set[byte as usize] = true;
+    }
+
+    move |input: &[u8]| {
+        let first = *input.get(0)?;
+        (set[first as usize] == true).then_some((&input[0..1], &input[1..]))
+    }
+}
