@@ -10,4 +10,3 @@ keywords = ["parser", "bytes"]
 
 
 [dependencies]
-bstr = "1.8.0"

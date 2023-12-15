@@ -1,28 +1,89 @@
-#![allow(dead_code)]
 // #![warn(missing_docs)]
 
 //! A library for matching patterns in byte slices
 
-use bstr::ByteSlice;
 use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
-
+mod r#match;
 mod pattern;
 
 pub use pattern::*;
+pub use r#match::*;
 
-/// The outcome of successfully testing one or more [patterns](`Pattern`) against a byte slice
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Match<'i, const N: usize>(
-    /// A list of all the matched slices.
-    pub [&'i [u8]; N],
-    /// What is left of the input
-    pub &'i [u8],
-);
+/// An interval with a lower and (potentially unbounded) upper bound
+///
+/// Both bounds are inclusive
+#[derive(Copy, Clone, Debug)]
+pub struct Interval<T>(T, Option<T>);
 
-impl<'i> Match<'i, 1> {
-    /// Helper function to return the value matched by a single pattern
-    pub fn value(&self) -> &[u8] {
-        self.0[0]
+impl From<usize> for Interval<usize> {
+    fn from(value: usize) -> Self {
+        Interval(value, Some(value))
+    }
+}
+
+impl From<u8> for Interval<u8> {
+    fn from(value: u8) -> Self {
+        Interval(value, Some(value))
+    }
+}
+
+impl From<char> for Interval<char> {
+    fn from(value: char) -> Self {
+        Interval(value, Some(value))
+    }
+}
+
+impl From<RangeInclusive<usize>> for Interval<usize> {
+    fn from(value: RangeInclusive<usize>) -> Self {
+        Interval(*value.start(), Some(*value.end()))
+    }
+}
+
+impl From<RangeInclusive<u8>> for Interval<u8> {
+    fn from(value: RangeInclusive<u8>) -> Self {
+        Interval(*value.start(), Some(*value.end()))
+    }
+}
+
+impl From<RangeInclusive<char>> for Interval<char> {
+    fn from(value: RangeInclusive<char>) -> Self {
+        Interval(*value.start(), Some(*value.end()))
+    }
+}
+
+impl From<RangeFrom<usize>> for Interval<usize> {
+    fn from(value: RangeFrom<usize>) -> Self {
+        Interval(value.start, None)
+    }
+}
+
+impl From<RangeFrom<u8>> for Interval<u8> {
+    fn from(value: RangeFrom<u8>) -> Self {
+        Interval(value.start, None)
+    }
+}
+
+impl From<RangeFrom<char>> for Interval<char> {
+    fn from(value: RangeFrom<char>) -> Self {
+        Interval(value.start, None)
+    }
+}
+
+impl From<RangeToInclusive<usize>> for Interval<usize> {
+    fn from(value: RangeToInclusive<usize>) -> Self {
+        Interval(0, Some(value.end))
+    }
+}
+
+impl From<RangeToInclusive<u8>> for Interval<u8> {
+    fn from(value: RangeToInclusive<u8>) -> Self {
+        Interval(0, Some(value.end))
+    }
+}
+
+impl From<RangeToInclusive<char>> for Interval<char> {
+    fn from(value: RangeToInclusive<char>) -> Self {
+        Interval(0 as char, Some(value.end))
     }
 }
 
@@ -30,7 +91,7 @@ impl<'i> Match<'i, 1> {
 pub trait Pattern {
     /// Tests the pattern against the input slice. If the pattern matches, the matching part is
     /// returned along with what is left of the input. Returns `None` if the pattern does not match
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>>;
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Matches<'i, 1>>;
 
     /// Expresses an alternate pattern.
     ///
@@ -85,23 +146,23 @@ pub trait Pattern {
     ///
     /// Returns a new pattern that will match an input slice if `self` can match `count` times
     ///
-    /// See [`Repetition`] for more examples of types that implement it.
+    /// Anything that can be safely converted to an [`Interval`] can be used as an argument .
     ///
     /// ```
-    /// use bparse::Pattern;
+    /// use bparse::{Pattern};
     ///
     /// let input = b"ababab";
     /// let pattern = "a".and("b").repeats(1..=2);
     ///
     /// assert_eq!(b"abab", pattern.test(input).unwrap().value());
     /// ```
-    fn repeats<R: Repetition>(self, count: R) -> Repeat<Self, R>
+    fn repeats<I: Into<Interval<usize>>>(self, count: I) -> Repeat<Self>
     where
         Self: Sized,
     {
         Repeat {
             pattern: self,
-            count,
+            count: count.into(),
         }
     }
 
@@ -176,9 +237,9 @@ pub struct And<C1, C2> {
 
 /// See [`Pattern::repeats`]
 #[derive(Clone, Copy, Debug)]
-pub struct Repeat<P, R> {
+pub struct Repeat<P> {
     pattern: P,
-    count: R,
+    count: Interval<usize>,
 }
 
 /// See [`Pattern::not`]
@@ -194,7 +255,7 @@ pub struct Optional<P> {
 }
 
 impl<C1: Pattern, C2: Pattern> Pattern for Or<C1, C2> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Matches<'i, 1>> {
         self.pattern1
             .test(input)
             .or_else(|| self.pattern2.test(input))
@@ -202,30 +263,30 @@ impl<C1: Pattern, C2: Pattern> Pattern for Or<C1, C2> {
 }
 
 impl<C1: Pattern, C2: Pattern> Pattern for And<C1, C2> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Matches<'i, 1>> {
         let mut offset = 0;
-        let Some(Match([value], rest)) = self.pattern1.test(input) else {
+        let Some(Matches([value], rest)) = self.pattern1.test(input) else {
             return None;
         };
 
         offset += value.len();
 
-        let Some(Match([value], rest)) = self.pattern2.test(rest) else {
+        let Some(Matches([value], rest)) = self.pattern2.test(rest) else {
             return None;
         };
 
         offset += value.len();
 
-        Some(Match([&input[..offset]], rest))
+        Some(Matches([&input[..offset]], rest))
     }
 }
 
-impl<P: Pattern, R: Repetition> Pattern for Repeat<P, R> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
+impl<P: Pattern> Pattern for Repeat<P> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Matches<'i, 1>> {
         let mut counter = 0;
         let mut offset = 0;
-        let lower_bound = self.count.lower_bound();
-        if let Some(upper_bound) = self.count.upper_bound() {
+        let lower_bound = self.count.0;
+        if let Some(upper_bound) = self.count.1 {
             assert!(
                 upper_bound >= lower_bound,
                 "upper bound should be greater than or equal to the lower bound"
@@ -234,17 +295,17 @@ impl<P: Pattern, R: Repetition> Pattern for Repeat<P, R> {
 
         loop {
             // We hit the upper bound of pattern repetition
-            if let Some(upper_bound) = self.count.upper_bound() {
+            if let Some(upper_bound) = self.count.1 {
                 if counter == upper_bound {
-                    return Some(Match([&input[..offset]], &input[offset..]));
+                    return Some(Matches([&input[..offset]], &input[offset..]));
                 }
             };
 
-            let Some(Match([value], _)) = self.pattern.test(&input[offset..]) else {
+            let Some(Matches([value], _)) = self.pattern.test(&input[offset..]) else {
                 if counter < lower_bound {
                     return None;
                 }
-                return Some(Match([&input[..offset]], &input[offset..]));
+                return Some(Matches([&input[..offset]], &input[offset..]));
             };
 
             counter += 1;
@@ -257,12 +318,12 @@ impl<P> Pattern for Not<P>
 where
     P: Pattern,
 {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Matches<'i, 1>> {
         if self.pattern.test(input).is_some() {
             return None;
         };
 
-        Some(Match([b""], input))
+        Some(Matches([b""], input))
     }
 }
 
@@ -270,151 +331,28 @@ impl<P> Pattern for Optional<P>
 where
     P: Pattern,
 {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
-        self.pattern.test(input).or(Some(Match([b""], input)))
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Matches<'i, 1>> {
+        self.pattern.test(input).or(Some(Matches([b""], input)))
     }
 }
 
 impl<F> Pattern for F
 where
-    F: Fn(&[u8]) -> Option<Match<1>>,
+    F: Fn(&[u8]) -> Option<Matches<1>>,
 {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Matches<'i, 1>> {
         (self)(input)
     }
 }
 
 impl Pattern for &str {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Matches<'i, 1>> {
         let bytes = self.as_bytes();
         let Some(_) = input.strip_prefix(bytes) else {
             return None;
         };
 
-        Some(Match([&input[..self.len()]], &input[self.len()..]))
-    }
-}
-
-impl Pattern for RangeFrom<u8> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
-        let first = *input.get(0)?;
-        (first >= self.start).then_some(Match([&input[0..1]], &input[1..]))
-    }
-}
-
-impl Pattern for RangeFrom<char> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
-        let mut iter = input.char_indices();
-        let (_, end, c) = iter.next()?;
-
-        let c = c as u32;
-
-        (c >= self.start as u32).then_some(Match([&input[..end]], &input[end..]))
-    }
-}
-
-impl Pattern for RangeToInclusive<u8> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
-        let first = *input.get(0)?;
-        (first <= self.end).then_some(Match([&input[0..1]], &input[1..]))
-    }
-}
-
-impl Pattern for RangeToInclusive<char> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
-        let mut iter = input.char_indices();
-        let (_, end, c) = iter.next()?;
-
-        let c = c as u32;
-
-        (c <= self.end as u32).then_some(Match([&input[..end]], &input[end..]))
-    }
-}
-
-impl Pattern for RangeInclusive<u8> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
-        let first = input.get(0)?;
-        (first >= self.start() && first <= self.end()).then_some(Match([&input[0..1]], &input[1..]))
-    }
-}
-
-impl Pattern for RangeInclusive<char> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
-        let mut iter = input.char_indices();
-        let (_, end, c) = iter.next()?;
-
-        let c = c as u32;
-
-        (c >= *self.start() as u32 && c <= *self.end() as u32)
-            .then_some(Match([&input[..end]], &input[end..]))
-    }
-}
-
-/// Trait used to specify start and end bounds for pattern repetitions
-///
-/// Unlike the standard library's [`std::ops::RangeBounds`],
-///
-/// 1. this trait cannot express an unbounded lower bound
-/// 2. this trait's bounds are always inclusive
-///
-/// # Examples
-///
-/// ```
-/// use bparse::Repetition;
-///
-/// assert_eq!(3.lower_bound(), 3);
-/// assert_eq!(3.upper_bound(), Some(3));
-///
-/// assert_eq!((2..=4).lower_bound(), 2);
-/// assert_eq!((2..=4).upper_bound(), Some(4));
-///
-/// assert_eq!((..=10).lower_bound(), 0);
-/// assert_eq!((..=10).upper_bound(), Some(10));
-///
-/// assert_eq!((3..).lower_bound(), 3);
-/// assert_eq!((3..).upper_bound(), None);
-/// ```
-pub trait Repetition {
-    /// The minimum amount of times a pattern should repeat
-    fn lower_bound(&self) -> usize;
-
-    /// The maxiumum amount of times a pattern should repeat, possibly unbounded.
-    fn upper_bound(&self) -> Option<usize>;
-}
-
-impl Repetition for usize {
-    fn lower_bound(&self) -> usize {
-        *self
-    }
-    fn upper_bound(&self) -> Option<usize> {
-        Some(*self)
-    }
-}
-
-impl Repetition for RangeInclusive<usize> {
-    fn lower_bound(&self) -> usize {
-        *self.start()
-    }
-    fn upper_bound(&self) -> Option<usize> {
-        Some(*self.end())
-    }
-}
-
-impl Repetition for RangeToInclusive<usize> {
-    fn lower_bound(&self) -> usize {
-        0
-    }
-    fn upper_bound(&self) -> Option<usize> {
-        Some(self.end)
-    }
-}
-
-impl Repetition for RangeFrom<usize> {
-    fn lower_bound(&self) -> usize {
-        self.start
-    }
-    fn upper_bound(&self) -> Option<usize> {
-        None
+        Some(Matches([&input[..self.len()]], &input[self.len()..]))
     }
 }
 
@@ -430,7 +368,7 @@ mod tests {
         let out = pattern.test(input);
         match result {
             Some((value, rest)) => {
-                assert_eq!(Some(Match([value], rest)), out);
+                assert_eq!(Some(Matches([value], rest)), out);
             }
             None => {
                 assert_eq!(None, out);
@@ -445,39 +383,31 @@ mod tests {
         do_test("a", b"a1b2", Some((b"a", b"1b2")));
         do_test("١", b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
 
-        // Parsing using byte ranges
-        do_test(97.., b"a1b2", Some((b"a", b"1b2")));
-        do_test(..=97, b"a1b2", Some((b"a", b"1b2")));
-        do_test(96..=98, b"a1b2", Some((b"a", b"1b2")));
-
-        // Parsing using char ranges
-        do_test('٠'..='٩', b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
-        do_test(..='٩', b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
-        do_test('٠'.., b"\xd9\xa1", Some((b"\xd9\xa1", &[])));
-
         // Parsing using alternatives
-        do_test("b".or(97..), b"a1b2", Some((b"a", b"1b2")));
+        do_test("b".or("a"), b"a1b2", Some((b"a", b"1b2")));
 
         // Parsing in sequence
         do_test("9".and("7").and("8"), b"978", Some((b"978", b"")));
 
         // Negating a pattern
-        do_test(('0'..='9').not(), b"a1b2", Some((b"", b"a1b2")));
+        do_test(range(b'0', b'9').not(), b"a1b2", Some((b"", b"a1b2")));
 
         // Optional
         do_test(" ".optional().and("a"), b"a1b2", Some((b"a", b"1b2")));
         do_test(" ".optional().and("a"), b" a1b2", Some((b" a", b"1b2")));
 
         // Parsing using functions
-        fn parse_a(input: &[u8]) -> Option<Match<1>> {
+        fn parse_a(input: &[u8]) -> Option<Matches<1>> {
             "a".test(input)
         }
 
-        fn parse_1(input: &[u8]) -> Option<Match<1>> {
+        fn parse_1(input: &[u8]) -> Option<Matches<1>> {
             "1".test(input)
         }
+        let huh = parse_a.and(parse_1);
 
-        do_test(parse_a.and(parse_1), b"a1b2", Some((b"a1", b"b2")))
+        do_test(huh, b"a1b2", Some((b"a1", b"b2")));
+        do_test(huh, b"a1b2", Some((b"a1", b"b2")));
     }
 
     #[test]
@@ -501,6 +431,8 @@ mod tests {
         );
 
         do_test(byteset("&@*%#!?").repeats(0..), b"#!q", Some((b"#!", b"q")));
+
+        do_test(range(b'`', b'b'), b"a1b2", Some((b"a", b"1b2")));
     }
 
     #[test]
