@@ -1,7 +1,8 @@
 #![warn(missing_docs)]
 
 //! This crate provides utilites for parsing byte slices. The API borrows some concepts from other
-//! parser-combinator crates but takes a different approach to handling input, output and errors.
+//! parser-combinator crates but heavily simplifies things by eschewing error management and
+//! focusing exclusively on parsing byte slices.
 //!
 //! Here is a quick example showing how you would implement a hexadecimal color parser:
 //!
@@ -105,8 +106,6 @@
 //! # Some(())
 //! # }
 //! ```
-//!
-//!
 
 use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
 mod r#match;
