@@ -1,6 +1,112 @@
-// #![warn(missing_docs)]
+#![warn(missing_docs)]
 
-//! A library for matching patterns in byte slices
+//! This crate provides utilites for parsing byte slices. The API borrows some concepts from other
+//! parser-combinator crates but takes a different approach to handling input, output and errors.
+//!
+//! Here is a quick example showing how you would implement a hexadecimal color parser:
+//!
+//! ```rust
+//! use bparse::{Pattern, Matches, range, end};
+//! use std::str::from_utf8;
+//!
+//! #[derive(Debug, PartialEq)]
+//! pub struct Color {
+//!   pub red: u8,
+//!   pub green: u8,
+//!   pub blue: u8,
+//! }
+//!
+//! fn main() {
+//!   assert_eq!(hex_color("#2F14DF"), Some(Color {
+//!     red: 47,
+//!     green: 20,
+//!     blue: 223,
+//!   }));
+//! }
+//!
+//! fn hex_color(input: &str) -> Option<Color> {
+//!   let hexbyte = range(b'0', b'9').or(range(b'A', b'F')).or(range(b'a', b'f')).repeats(2);
+//!
+//!   let [red, green, blue] = Matches::new(input.as_bytes())
+//!     .ignore("#")?
+//!     .pattern(hexbyte)?
+//!     .pattern(hexbyte)?
+//!     .pattern(hexbyte)?
+//!     .ignore(end)?
+//!     .0;
+//!
+//!   Some(Color {
+//!     red: u8::from_str_radix(from_utf8(red).unwrap(), 16).unwrap(),
+//!     green: u8::from_str_radix(from_utf8(green).unwrap(), 16).unwrap(),
+//!     blue: u8::from_str_radix(from_utf8(blue).unwrap(), 16).unwrap()
+//!   })
+//! }
+//! ```
+//!
+//! ## Overview
+//!
+//! The core of this crate is the [`Pattern`] trait. Its main required method is `.test()`
+//!
+//! Calling `.test()` on a type implementing `Pattern` will return a [`Matches`] struct with an array
+//! of exactly one slice representing the part of the input that was recognized. The `Matches`
+//! struct also contains what is left of the input after parsing:
+//!
+//! ```
+//! use bparse::{Pattern, Matches};
+//!
+//! # fn main() {
+//! #     do_test().unwrap();
+//! # }
+//! # fn do_test() -> Option<()> {
+//! let input = b"abc 222 #!";
+//! let Matches([letters], rest) = "a".and("bc").test(input)?;
+//! let Matches(_, rest) = " ".test(rest)?;
+//! let Matches([numbers], rest) = "2".repeats(3).test(rest)?;
+//! let Matches(_, rest) = " ".test(rest)?;
+//! let Matches([symbols], rest) = "#".or("!").repeats(2).test(rest)?;
+//!
+//! assert_eq!(letters, b"abc");
+//! assert_eq!(numbers, b"222");
+//! assert_eq!(symbols, b"#!");
+//! assert_eq!(rest, b"");
+//! # Some(())
+//! # }
+//! ```
+//!
+//! Parsing by destructuring the `Matches` struct is the first way to use this crate.
+//! This works great when you only need to extract a single slice from a string.
+//!
+//! But once you need to parse out multiple slices, the code starts to look a bit cluttered. What
+//! we need is a way to "chain" the patterns together, so the output from one pattern test becomes
+//! the input into the next pattern test.
+//!
+//! That is exactly what [`Matches::pattern`] does:
+//!
+//! ```
+//! use bparse::{Pattern, Matches};
+//!
+//! # fn main() {
+//! #     do_test().unwrap();
+//! # }
+//! # fn do_test() -> Option<()> {
+//! let input = b"abc 222 #!";
+//!
+//! let [letters, numbers, symbols] = Matches::new(input)
+//!     .pattern("a".and("bc"))?
+//!     .ignore(" ")?
+//!     .pattern("2".repeats(3))?
+//!     .ignore(" ")?
+//!     .pattern("#".or("!").repeats(2))?
+//!     .0;
+//!
+//! assert_eq!(letters, b"abc");
+//! assert_eq!(numbers, b"222");
+//! assert_eq!(symbols, b"#!");
+//! # Some(())
+//! # }
+//! ```
+//!
+//!
 
 use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
 mod r#match;
