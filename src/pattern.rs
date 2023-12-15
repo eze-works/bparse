@@ -94,8 +94,8 @@ pub struct ByteSet([bool; 256]);
 
 impl Pattern for ByteSet {
     fn test<'i>(&self, input: &'i [u8]) -> Option<Matches<'i, 1>> {
-        let first = *input.get(0)?;
-        (self.0[first as usize] == true).then_some(Matches([&input[0..1]], &input[1..]))
+        let first = *input.first()?;
+        self.0[first as usize].then_some(Matches([&input[0..1]], &input[1..]))
     }
 }
 
@@ -121,7 +121,7 @@ pub struct ByteRange(u8, u8);
 
 impl Pattern for ByteRange {
     fn test<'i>(&self, input: &'i [u8]) -> Option<Matches<'i, 1>> {
-        let first = *input.get(0)?;
+        let first = *input.first()?;
 
         if first < self.0 {
             return None;
