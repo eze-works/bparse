@@ -7,7 +7,7 @@ A library for recognizing patterns in byte slices.
 Hexadecimal color parser:
 
 ```rust
-use bparse::{BytePattern, pattern};
+use bparse::{Pattern, Match, end};
 use std::str::from_utf8;
 
 #[derive(Debug, PartialEq)]
@@ -28,11 +28,11 @@ fn main() {
 fn hex_color(input: &str) -> Option<Color> {
   let hexbyte = ('0'..='9').or('a'..='f').or('A'..='F').repeats(2);
 
-  let (_, rest) = "#".test(input.as_bytes())?;
+  let Match(_, rest) = "#".test(input.as_bytes())?;
 
-  let (red, rest) = hexbyte.test(rest)?;
-  let (green, rest) = hexbyte.test(rest)?;
-  let (blue, _) = hexbyte.then(pattern::end).test(rest)?;
+  let Match([red], rest) = hexbyte.test(rest)?;
+  let Match([green], rest) = hexbyte.test(rest)?;
+  let Match([blue], _) = hexbyte.and(end).test(rest)?;
 
   Some(Color {
     red: u8::from_str_radix(from_utf8(red).unwrap(), 16).unwrap(),

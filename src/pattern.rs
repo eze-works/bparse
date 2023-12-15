@@ -1,20 +1,20 @@
-//! Implementations of the [`BytePattern`] trait for recognizing common patterns
+//! Implementations of the [`Pattern`] trait for recognizing common patterns
 
-use crate::BytePattern;
+use crate::{Match, Pattern};
 
 /// Returns `None` if the input is not empty
 ///
 /// # Example
 ///
 /// ```
-/// use bparse::{BytePattern, pattern};
+/// use bparse::{Pattern, end};
 ///
-/// assert_eq!(pattern::end.test(b"abc"), None);
-/// assert_eq!(pattern::end.test(b""), Some((&[][..], &[][..])));
+/// assert_eq!(end.test(b"abc"), None);
+/// assert_eq!(end.test(b"").unwrap().value(), b"");
 /// ```
-pub fn end(input: &[u8]) -> Option<(&[u8], &[u8])> {
+pub fn end(input: &[u8]) -> Option<Match<1>> {
     if input.is_empty() {
-        Some((&[], input))
+        Some(Match([&[]], input))
     } else {
         None
     }
@@ -25,11 +25,11 @@ pub fn end(input: &[u8]) -> Option<(&[u8], &[u8])> {
 /// # Example
 ///
 /// ```
-/// use bparse::{BytePattern, pattern};
-/// assert_eq!(pattern::digit.test(b"1"), Some((&b"1"[..], &[][..])));
-/// assert_eq!(pattern::digit.test(b"a"), None);
+/// use bparse::{Pattern, digit};
+/// assert_eq!(digit.test(b"1").unwrap().value(), b"1");
+/// assert_eq!(digit.test(b"a"), None);
 /// ```
-pub fn digit(input: &[u8]) -> Option<(&[u8], &[u8])> {
+pub fn digit(input: &[u8]) -> Option<Match<1>> {
     (0x30..=0x39).test(input)
 }
 
@@ -38,11 +38,11 @@ pub fn digit(input: &[u8]) -> Option<(&[u8], &[u8])> {
 /// # Example
 ///
 /// ```
-/// use bparse::{BytePattern, pattern};
-/// assert_eq!(pattern::alpha.test(b"a"), Some((&b"a"[..], &[][..])));
-/// assert_eq!(pattern::alpha.test(b"1"), None);
+/// use bparse::{Pattern, alpha};
+/// assert_eq!(alpha.test(b"a").unwrap().value(), b"a");
+/// assert_eq!(alpha.test(b"1"), None);
 /// ```
-pub fn alpha(input: &[u8]) -> Option<(&[u8], &[u8])> {
+pub fn alpha(input: &[u8]) -> Option<Match<1>> {
     ('a'..='z').or('A'..='Z').test(input)
 }
 
@@ -51,31 +51,31 @@ pub fn alpha(input: &[u8]) -> Option<(&[u8], &[u8])> {
 /// # Example
 ///
 /// ```
-/// use bparse::{BytePattern, pattern};
-/// assert_eq!(pattern::hex.test(b"a"), Some((&b"a"[..], &[][..])));
-/// assert_eq!(pattern::hex.test(b"1"), Some((&b"1"[..], &[][..])));
-/// assert_eq!(pattern::hex.test(b"g"), None);
+/// use bparse::{Pattern, hex};
+/// assert_eq!(hex.test(b"a").unwrap().value(), b"a");
+/// assert_eq!(hex.test(b"1").unwrap().value(), b"1");
+/// assert_eq!(hex.test(b"g"), None);
 /// ```
-pub fn hex(input: &[u8]) -> Option<(&[u8], &[u8])> {
+pub fn hex(input: &[u8]) -> Option<Match<1>> {
     ('a'..='f').or('A'..='F').or(digit).test(input)
 }
 
 /// Returns a pattern that will match any one of the bytes in `alternatives`
 ///
-/// This is a useful alternative to a long `BytePattern::or()` chain when you have many
+/// This is a useful alternative to a long `Pattern::or()` chain when you have many
 /// alternatives.
 ///
 /// # Example
 ///
 /// ```
-/// use bparse::{BytePattern, pattern};
+/// use bparse::{Pattern, byteset};
 ///
-/// let punctuation = pattern::byteset(".,\"'-?:!;");
-/// assert_eq!(punctuation.test(b"!"), Some((&b"!"[..], &[][..])));
-/// assert_eq!(punctuation.test(b","), Some((&b","[..], &[][..])));
+/// let punctuation = byteset(".,\"'-?:!;");
+/// assert_eq!(punctuation.test(b"!").unwrap().value(), b"!");
+/// assert_eq!(punctuation.test(b",").unwrap().value(), b",");
 /// assert_eq!(punctuation.test(b"a"), None);
 /// ```
-pub fn byteset(alternatives: &str) -> impl Fn(&[u8]) -> Option<(&[u8], &[u8])> {
+pub fn byteset(alternatives: &str) -> impl Fn(&[u8]) -> Option<Match<1>> {
     let mut set: [bool; 256] = [false; 256];
 
     for &byte in alternatives.as_bytes() {
@@ -84,6 +84,6 @@ pub fn byteset(alternatives: &str) -> impl Fn(&[u8]) -> Option<(&[u8], &[u8])> {
 
     move |input: &[u8]| {
         let first = *input.get(0)?;
-        (set[first as usize] == true).then_some((&input[0..1], &input[1..]))
+        (set[first as usize] == true).then_some(Match([&input[0..1]], &input[1..]))
     }
 }

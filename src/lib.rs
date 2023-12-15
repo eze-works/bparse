@@ -1,17 +1,36 @@
-#![warn(missing_docs)]
+#![allow(dead_code)]
+// #![warn(missing_docs)]
 
 //! A library for matching patterns in byte slices
 
 use bstr::ByteSlice;
 use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
 
-pub mod pattern;
+mod pattern;
+
+pub use pattern::*;
+
+/// The outcome of successfully testing one or more [patterns](`Pattern`) against a byte slice
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Match<'i, const N: usize>(
+    /// A list of all the matched slices.
+    pub [&'i [u8]; N],
+    /// What is left of the input
+    pub &'i [u8],
+);
+
+impl<'i> Match<'i, 1> {
+    /// Helper function to return the value matched by a single pattern
+    pub fn value(&self) -> &[u8] {
+        self.0[0]
+    }
+}
 
 /// Expresses that the implementing type can be used to match a byte slice
-pub trait BytePattern {
+pub trait Pattern {
     /// Tests the pattern against the input slice. If the pattern matches, the matching part is
     /// returned along with what is left of the input. Returns `None` if the pattern does not match
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])>;
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>>;
 
     /// Expresses an alternate pattern.
     ///
@@ -20,12 +39,12 @@ pub trait BytePattern {
     /// # Example
     ///
     /// ```
-    /// use bparse::BytePattern;
+    /// use bparse::Pattern;
     ///
     /// let input = b"b";
     /// let pattern = "a".or("b");
     ///
-    /// assert_eq!(b"b", pattern.test(input).unwrap().0);
+    /// assert_eq!(b"b", pattern.test(input).unwrap().value());
     /// ```
     fn or<P>(self, other: P) -> Or<Self, P>
     where
@@ -39,24 +58,24 @@ pub trait BytePattern {
 
     /// Expreses a sequence of patterns
     ///
-    /// Returns a new pattern that will match an input slice if `self` matches it, and `other`
-    /// matches the rest.
+    /// Returns a new pattern that will test an input slice against `self` and `other` in sequence,
+    /// feeding the remainder from the first match as the input to the second.
     ///
     /// # Example
     ///
     /// ```
-    /// use bparse::BytePattern;
+    /// use bparse::Pattern;
     ///
     /// let input = b"abc";
-    /// let pattern = "a".then("b").then("c");
+    /// let pattern = "a".and("b").and("c");
     ///
-    /// assert_eq!(b"abc", pattern.test(input).unwrap().0);
+    /// assert_eq!(b"abc", pattern.test(input).unwrap().value());
     /// ```
-    fn then<P>(self, next: P) -> Then<Self, P>
+    fn and<P>(self, next: P) -> And<Self, P>
     where
         Self: Sized,
     {
-        Then {
+        And {
             pattern1: self,
             pattern2: next,
         }
@@ -69,12 +88,12 @@ pub trait BytePattern {
     /// See [`Repetition`] for more examples of types that implement it.
     ///
     /// ```
-    /// use bparse::BytePattern;
+    /// use bparse::Pattern;
     ///
     /// let input = b"ababab";
-    /// let pattern = "a".then("b").repeats(1..=2);
+    /// let pattern = "a".and("b").repeats(1..=2);
     ///
-    /// assert_eq!(b"abab", pattern.test(input).unwrap().0);
+    /// assert_eq!(b"abab", pattern.test(input).unwrap().value());
     /// ```
     fn repeats<R: Repetition>(self, count: R) -> Repeat<Self, R>
     where
@@ -95,17 +114,16 @@ pub trait BytePattern {
     /// Say you want to match a string of multiple 'a's and 'b's, except the string must not end in
     /// a 'b':
     /// ```
-    /// use bparse::BytePattern;
-    /// use bparse::pattern::end;
+    /// use bparse::{Pattern, end};
     ///
     /// let input1 = b"aabaaaa";
     /// let input2 = b"aaaab";
     ///
     /// // a pattern of either a's or b's that do not occur at the input
-    /// let pattern = "a".or("b".then(end.not())).repeats(0..);
+    /// let pattern = "a".or("b".and(end.not())).repeats(0..);
     ///
-    /// assert_eq!(b"aabaaaa", pattern.test(input1).unwrap().0);
-    /// assert_eq!(b"aaaa", pattern.test(input2).unwrap().0);
+    /// assert_eq!(b"aabaaaa", pattern.test(input1).unwrap().value());
+    /// assert_eq!(b"aaaa", pattern.test(input2).unwrap().value());
     ///
     ///
     /// ```
@@ -124,15 +142,15 @@ pub trait BytePattern {
     /// # Example
     ///
     /// ```
-    /// use bparse::BytePattern;
+    /// use bparse::Pattern;
     ///
     /// let input1 = b"aab";
     /// let input2 = b"aa";
     ///
-    /// let pattern = "aa".then("b".optional());
+    /// let pattern = "aa".and("b".optional());
     ///
-    /// assert_eq!(b"aab", pattern.test(input1).unwrap().0);
-    /// assert_eq!(b"aa", pattern.test(input2).unwrap().0);
+    /// assert_eq!(b"aab", pattern.test(input1).unwrap().value());
+    /// assert_eq!(b"aa", pattern.test(input2).unwrap().value());
     /// ```
     fn optional(self) -> Optional<Self>
     where
@@ -142,68 +160,68 @@ pub trait BytePattern {
     }
 }
 
-/// See [`BytePattern::or`]
+/// See [`Pattern::or`]
 #[derive(Clone, Copy, Debug)]
 pub struct Or<C1, C2> {
     pattern1: C1,
     pattern2: C2,
 }
 
-/// See [`BytePattern::then`]
+/// See [`Pattern::and`]
 #[derive(Clone, Copy, Debug)]
-pub struct Then<C1, C2> {
+pub struct And<C1, C2> {
     pattern1: C1,
     pattern2: C2,
 }
 
-/// See [`BytePattern::repeats`]
+/// See [`Pattern::repeats`]
 #[derive(Clone, Copy, Debug)]
 pub struct Repeat<P, R> {
     pattern: P,
     count: R,
 }
 
-/// See [`BytePattern::not`]
+/// See [`Pattern::not`]
 #[derive(Clone, Copy, Debug)]
 pub struct Not<P> {
     pattern: P,
 }
 
-/// See [`BytePattern::optional`]
+/// See [`Pattern::optional`]
 #[derive(Clone, Copy, Debug)]
 pub struct Optional<P> {
     pattern: P,
 }
 
-impl<C1: BytePattern, C2: BytePattern> BytePattern for Or<C1, C2> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+impl<C1: Pattern, C2: Pattern> Pattern for Or<C1, C2> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         self.pattern1
             .test(input)
             .or_else(|| self.pattern2.test(input))
     }
 }
 
-impl<C1: BytePattern, C2: BytePattern> BytePattern for Then<C1, C2> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+impl<C1: Pattern, C2: Pattern> Pattern for And<C1, C2> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         let mut offset = 0;
-        let Some((value, rest)) = self.pattern1.test(input) else {
+        let Some(Match([value], rest)) = self.pattern1.test(input) else {
             return None;
         };
 
         offset += value.len();
 
-        let Some((value, rest)) = self.pattern2.test(rest) else {
+        let Some(Match([value], rest)) = self.pattern2.test(rest) else {
             return None;
         };
 
         offset += value.len();
 
-        Some((&input[..offset], rest))
+        Some(Match([&input[..offset]], rest))
     }
 }
 
-impl<P: BytePattern, R: Repetition> BytePattern for Repeat<P, R> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+impl<P: Pattern, R: Repetition> Pattern for Repeat<P, R> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         let mut counter = 0;
         let mut offset = 0;
         let lower_bound = self.count.lower_bound();
@@ -218,15 +236,15 @@ impl<P: BytePattern, R: Repetition> BytePattern for Repeat<P, R> {
             // We hit the upper bound of pattern repetition
             if let Some(upper_bound) = self.count.upper_bound() {
                 if counter == upper_bound {
-                    return Some((&input[..offset], &input[offset..]));
+                    return Some(Match([&input[..offset]], &input[offset..]));
                 }
             };
 
-            let Some((value, _)) = self.pattern.test(&input[offset..]) else {
+            let Some(Match([value], _)) = self.pattern.test(&input[offset..]) else {
                 if counter < lower_bound {
                     return None;
                 }
-                return Some((&input[..offset], &input[offset..]));
+                return Some(Match([&input[..offset]], &input[offset..]));
             };
 
             counter += 1;
@@ -235,100 +253,100 @@ impl<P: BytePattern, R: Repetition> BytePattern for Repeat<P, R> {
     }
 }
 
-impl<P> BytePattern for Not<P>
+impl<P> Pattern for Not<P>
 where
-    P: BytePattern,
+    P: Pattern,
 {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         if self.pattern.test(input).is_some() {
             return None;
         };
 
-        Some((b"", input))
+        Some(Match([b""], input))
     }
 }
 
-impl<P> BytePattern for Optional<P>
+impl<P> Pattern for Optional<P>
 where
-    P: BytePattern,
+    P: Pattern,
 {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
-        self.pattern.test(input).or(Some((b"", input)))
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
+        self.pattern.test(input).or(Some(Match([b""], input)))
     }
 }
 
-impl<F> BytePattern for F
+impl<F> Pattern for F
 where
-    F: Fn(&[u8]) -> Option<(&[u8], &[u8])>,
+    F: Fn(&[u8]) -> Option<Match<1>>,
 {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         (self)(input)
     }
 }
 
-impl BytePattern for &str {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+impl Pattern for &str {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         let bytes = self.as_bytes();
         let Some(_) = input.strip_prefix(bytes) else {
             return None;
         };
 
-        Some((&input[..self.len()], &input[self.len()..]))
+        Some(Match([&input[..self.len()]], &input[self.len()..]))
     }
 }
 
-impl BytePattern for RangeFrom<u8> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+impl Pattern for RangeFrom<u8> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         let first = *input.get(0)?;
-        (first >= self.start).then_some((&input[0..1], &input[1..]))
+        (first >= self.start).then_some(Match([&input[0..1]], &input[1..]))
     }
 }
 
-impl BytePattern for RangeFrom<char> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+impl Pattern for RangeFrom<char> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
 
         let c = c as u32;
 
-        (c >= self.start as u32).then_some((&input[..end], &input[end..]))
+        (c >= self.start as u32).then_some(Match([&input[..end]], &input[end..]))
     }
 }
 
-impl BytePattern for RangeToInclusive<u8> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+impl Pattern for RangeToInclusive<u8> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         let first = *input.get(0)?;
-        (first <= self.end).then_some((&input[0..1], &input[1..]))
+        (first <= self.end).then_some(Match([&input[0..1]], &input[1..]))
     }
 }
 
-impl BytePattern for RangeToInclusive<char> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+impl Pattern for RangeToInclusive<char> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
 
         let c = c as u32;
 
-        (c <= self.end as u32).then_some((&input[..end], &input[end..]))
+        (c <= self.end as u32).then_some(Match([&input[..end]], &input[end..]))
     }
 }
 
-impl BytePattern for RangeInclusive<u8> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+impl Pattern for RangeInclusive<u8> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         let first = input.get(0)?;
-        (first >= self.start() && first <= self.end()).then_some((&input[0..1], &input[1..]))
+        (first >= self.start() && first <= self.end()).then_some(Match([&input[0..1]], &input[1..]))
     }
 }
 
-impl BytePattern for RangeInclusive<char> {
-    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+impl Pattern for RangeInclusive<char> {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<Match<'i, 1>> {
         let mut iter = input.char_indices();
         let (_, end, c) = iter.next()?;
 
         let c = c as u32;
 
         (c >= *self.start() as u32 && c <= *self.end() as u32)
-            .then_some((&input[..end], &input[end..]))
+            .then_some(Match([&input[..end]], &input[end..]))
     }
 }
 
@@ -405,12 +423,19 @@ mod tests {
     use super::*;
 
     fn do_test(
-        pattern: impl BytePattern,
+        pattern: impl Pattern,
         input: &'static [u8],
         result: Option<(&'static [u8], &'static [u8])>,
     ) {
         let out = pattern.test(input);
-        assert_eq!(result, out);
+        match result {
+            Some((value, rest)) => {
+                assert_eq!(Some(Match([value], rest)), out);
+            }
+            None => {
+                assert_eq!(None, out);
+            }
+        };
     }
 
     #[test]
@@ -434,56 +459,48 @@ mod tests {
         do_test("b".or(97..), b"a1b2", Some((b"a", b"1b2")));
 
         // Parsing in sequence
-        do_test("9".then("7").then("8"), b"978", Some((b"978", b"")));
+        do_test("9".and("7").and("8"), b"978", Some((b"978", b"")));
 
         // Negating a pattern
         do_test(('0'..='9').not(), b"a1b2", Some((b"", b"a1b2")));
 
         // Optional
-        do_test(" ".optional().then("a"), b"a1b2", Some((b"a", b"1b2")));
-        do_test(" ".optional().then("a"), b" a1b2", Some((b" a", b"1b2")));
+        do_test(" ".optional().and("a"), b"a1b2", Some((b"a", b"1b2")));
+        do_test(" ".optional().and("a"), b" a1b2", Some((b" a", b"1b2")));
 
         // Parsing using functions
-        fn parse_a(input: &[u8]) -> Option<(&[u8], &[u8])> {
-            let first = input.get(0)?;
-
-            (*first == b'a').then_some((&input[0..1], &input[1..]))
+        fn parse_a(input: &[u8]) -> Option<Match<1>> {
+            "a".test(input)
         }
 
-        fn parse_1(input: &[u8]) -> Option<(&[u8], &[u8])> {
-            let first = input.get(0)?;
-
-            (*first == b'1').then_some((&input[0..1], &input[1..]))
+        fn parse_1(input: &[u8]) -> Option<Match<1>> {
+            "1".test(input)
         }
 
-        do_test(parse_a.then(parse_1), b"a1b2", Some((b"a1", b"b2")))
+        do_test(parse_a.and(parse_1), b"a1b2", Some((b"a1", b"b2")))
     }
 
     #[test]
     fn test_builtin_patterns() {
         do_test(
-            pattern::digit.repeats(0..),
+            digit.repeats(0..),
             b"0123456789",
             Some((b"0123456789", b"")),
         );
 
         do_test(
-            pattern::alpha.repeats(0..),
+            alpha.repeats(0..),
             b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
             Some((b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", b"")),
         );
 
         do_test(
-            pattern::hex.repeats(0..),
+            hex.repeats(0..),
             b"abcdefABCDEF0123456789",
             Some((b"abcdefABCDEF0123456789", b"")),
         );
 
-        do_test(
-            pattern::byteset("&@*%#!?").repeats(0..),
-            b"#!q",
-            Some((b"#!", b"q")),
-        );
+        do_test(byteset("&@*%#!?").repeats(0..), b"#!q", Some((b"#!", b"q")));
     }
 
     #[test]
