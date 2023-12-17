@@ -1,6 +1,6 @@
 use crate::Pattern;
 
-/// The outcome of successfully testing one or more [patterns](`Pattern`) against a byte slice
+/// A container of matched slices. Also stores the remaining input
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Matches<'i, const N: usize>(
     /// A list of all the matched slices.
@@ -18,13 +18,6 @@ impl<'i> Matches<'i, 0> {
     }
 }
 
-impl<'i> Matches<'i, 1> {
-    /// Helper function to return the value matched by a single pattern
-    pub fn value(&self) -> &[u8] {
-        self.0[0]
-    }
-}
-
 impl<'i, const N: usize> Matches<'i, N> {
     /// Tests the pattern `p` against the remaining input in `self` and returns a new
     /// `Match` struct if `p` matches.
@@ -32,7 +25,7 @@ impl<'i, const N: usize> Matches<'i, N> {
     /// The array of matched slices in the returned struct is identical to that in `self`.
     /// This has the effect of ignoring the value matched by `p`
     pub fn ignore(self, p: impl Pattern) -> Option<Matches<'i, N>> {
-        let Matches(_, rest) = p.test(self.1)?;
+        let (_, rest) = p.test(self.1)?;
         Some(Matches(self.0, rest))
     }
 }
@@ -48,7 +41,7 @@ macro_rules! impl_match {
             ///
             /// This method is implemented for up to 20 elements
             pub fn pattern(self, p: impl Pattern) -> Option<Matches<'i, $m>> {
-                let Matches([value], rest) = p.test(self.1)?;
+                let (value, rest) = p.test(self.1)?;
                 let mut result: [&[u8]; $m] = [&[]; $m];
                 let (existing_matches, new_match) = result.split_at_mut(self.0.len());
                 existing_matches.copy_from_slice(&self.0);
