@@ -511,11 +511,44 @@ pub fn oneof(alternatives: &str) -> OneOf {
     OneOf(set)
 }
 
+/// Inverse of [`oneof`]
+///
+/// # Example
+///
+/// ```
+/// use bparse::{Pattern, noneof};
+///
+/// let nondigits = noneof("0123456789");
+///
+/// assert_eq!(nondigits.test(b"A").unwrap().0, b"A");
+/// assert_eq!(nondigits.test(b"3"), None);
+/// ```
+///
+pub fn noneof(exclusions: &str) -> NoneOf {
+    let mut set: [bool; 256] = [true; 256];
+
+    for &byte in exclusions.as_bytes() {
+        set[byte as usize] = false;
+    }
+
+    NoneOf(set)
+}
+
 /// See [`oneof()`]
 #[derive(Debug, Clone, Copy)]
 pub struct OneOf([bool; 256]);
 
 impl Pattern for OneOf {
+    fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
+        let first = *input.first()?;
+        self.0[first as usize].then_some((&input[0..1], &input[1..]))
+    }
+}
+
+/// See [`noneof()`]
+pub struct NoneOf([bool; 256]);
+
+impl Pattern for NoneOf {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let first = *input.first()?;
         self.0[first as usize].then_some((&input[0..1], &input[1..]))
@@ -625,6 +658,7 @@ mod tests {
         );
 
         do_test(oneof("&@*%#!?").repeats(0..), b"#!q", Some((b"#!", b"q")));
+        do_test(noneof("ABC").repeats(0..), b"123C", Some((b"123", b"C")));
 
         do_test(range(b'`', b'b'), b"a1b2", Some((b"a", b"1b2")));
     }
