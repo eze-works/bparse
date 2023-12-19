@@ -5,7 +5,7 @@ edition = "2021"
 license = "MIT"
 readme = "README.md"
 description = "A library for parsing bytes"
-repository = "https://gitlab.com/wake-sleeper/bparse"
+repository = "https://git.sr.ht/~eanyanwu/bparse"
 keywords = ["parser", "bytes"]
 
 
