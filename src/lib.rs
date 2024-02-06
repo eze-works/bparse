@@ -501,11 +501,14 @@ pub fn hex(input: &[u8]) -> Option<(&[u8], &[u8])> {
 /// assert_eq!(punctuation.test(b",").unwrap().0, b",");
 /// assert_eq!(punctuation.test(b"a"), None);
 /// ```
-pub fn oneof(alternatives: &str) -> OneOf {
+pub const fn oneof(alternatives: &str) -> OneOf {
+    let bytes = alternatives.as_bytes();
     let mut set: [bool; 256] = [false; 256];
 
-    for &byte in alternatives.as_bytes() {
-        set[byte as usize] = true;
+    let mut i = 0;
+    while i < bytes.len() {
+        set[bytes[i] as usize] = true;
+        i += 1;
     }
 
     OneOf(set)
@@ -524,11 +527,14 @@ pub fn oneof(alternatives: &str) -> OneOf {
 /// assert_eq!(nondigits.test(b"3"), None);
 /// ```
 ///
-pub fn noneof(exclusions: &str) -> NoneOf {
+pub const fn noneof(exclusions: &str) -> NoneOf {
+    let bytes = exclusions.as_bytes();
     let mut set: [bool; 256] = [true; 256];
 
-    for &byte in exclusions.as_bytes() {
-        set[byte as usize] = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        set[bytes[i] as usize] = false;
+        i += 1;
     }
 
     NoneOf(set)
@@ -594,6 +600,7 @@ impl Pattern for ByteRange {
 mod tests {
     use super::*;
 
+    #[track_caller]
     fn do_test(
         pattern: impl Pattern,
         input: &'static [u8],
