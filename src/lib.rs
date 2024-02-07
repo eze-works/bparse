@@ -58,12 +58,12 @@
 //! // We want to match the version exactly
 //! let version_pattern = "HTTP/1.1";
 //!
-//! let method = parser.match_pattern(method_pattern)?;
-//! parser.match_pattern(" ")?;
-//! let request_target = parser.match_pattern(request_target_pattern)?;
-//! parser.match_pattern(" ")?;
-//! let version = parser.match_pattern(version_pattern)?;
-//! parser.match_pattern("\r\n".and(bparse::end))?;
+//! let method = parser.try_match(method_pattern)?;
+//! parser.try_match(" ")?;
+//! let request_target = parser.try_match(request_target_pattern)?;
+//! parser.try_match(" ")?;
+//! let version = parser.try_match(version_pattern)?;
+//! parser.try_match("\r\n".and(bparse::end))?;
 //!
 //! assert_eq!(method, b"GET");
 //! assert_eq!(request_target, b"/hello?value=world");
@@ -99,11 +99,11 @@
 //!
 //!   let mut parser = Parser::new(input.as_bytes());
 //!
-//!   parser.match_pattern("#")?;
-//!   let red = parser.match_pattern(hexbyte)?;
-//!   let green = parser.match_pattern(hexbyte)?;
-//!   let blue = parser.match_pattern(hexbyte)?;
-//!   parser.match_pattern(end)?;
+//!   parser.try_match("#")?;
+//!   let red = parser.try_match(hexbyte)?;
+//!   let green = parser.try_match(hexbyte)?;
+//!   let blue = parser.try_match(hexbyte)?;
+//!   parser.try_match(end)?;
 //!
 //!   Some(Color {
 //!     red: u8::from_str_radix(from_utf8(red).unwrap(), 16).unwrap(),
@@ -627,7 +627,7 @@ impl<'i> Parser<'i> {
     /// is returned and the parser is advanced by the length of the matched slice.
     ///
     /// Returns `None` if the pattern does not match.
-    pub fn match_pattern(&mut self, pattern: impl Pattern) -> Option<&'i [u8]> {
+    pub fn try_match(&mut self, pattern: impl Pattern) -> Option<&'i [u8]> {
         let (matched, _) = pattern.test(self.remaining())?;
 
         self.advance(matched.len());
@@ -734,15 +734,17 @@ mod tests {
         let input = b"aa bbcc";
         let mut parser = Parser::new(input);
 
-        let a = parser.match_pattern("a".repeats(2));
-        let _ = parser.match_pattern(optional(" "));
-        let b = parser.match_pattern("b".repeats(2));
-        let _ = parser.match_pattern(optional(" "));
-        let c = parser.match_pattern("c".repeats(2));
+        let a = parser.try_match("a".repeats(2));
+        let _ = parser.try_match(optional(" "));
+        let b = parser.try_match("b".repeats(2));
+        let _ = parser.try_match(optional(" "));
+        let c = parser.try_match("c".repeats(2));
+        let huh = parser.try_match("d");
 
         assert!(matches!(a, Some(b"aa")));
         assert!(matches!(b, Some(b"bb")));
         assert!(matches!(c, Some(b"cc")));
+        assert!(matches!(huh, None));
     }
 }
 

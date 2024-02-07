@@ -35,11 +35,11 @@ fn hex_color(input: &str) -> Option<Color> {
 
   let mut parser = Parser::new(input.as_bytes());
 
-  parser.match_pattern("#")?;
-  let red = parser.match_pattern(hexbyte)?;
-  let green = parser.match_pattern(hexbyte)?;
-  let blue = parser.match_pattern(hexbyte)?;
-  parser.match_pattern(end)?;
+  parser.try_match("#")?;
+  let red = parser.try_match(hexbyte)?;
+  let green = parser.try_match(hexbyte)?;
+  let blue = parser.try_match(hexbyte)?;
+  parser.try_match(end)?;
 
   Some(Color {
     red: u8::from_str_radix(from_utf8(red).unwrap(), 16).unwrap(),
