@@ -6,18 +6,18 @@
 //!
 //! ## Overview
 //!
-//! The crate's entry point is the [`Matches`] struct. It contains an array of input segments that
-//! have been matched. The array is populated by repeatedly calling `.add()` with a
-//! [pattern](Pattern) argument.
+//! The core of the crate is the [`Pattern`] trait. Patterns can be combined using combinatorial
+//! logic to express more complex rules about what a byte (or sequence of bytes) should look like.
 //!
-//! Patterns can be combined using combinatorial logic to express more complex rules about what a
-//! byte (or sequence of bytes should look like)
+//! The other part of the crate is the [`Parser`] struct. It provides a simpler way to parse a
+//! slice of bytes by continuously matching patterns against it.
+//!
 //!
 //! ## Examples
 //!
 //! __HTTP request line__
 //!
-//! Say you wanted to parse the request line of an HTTP message. There are three important parts to
+//! Say you want to parse the request line of an HTTP message. There are three important parts to
 //! extract: the method, the request target and the protocol version.
 //!
 //! ```text
@@ -29,7 +29,7 @@
 //! _Note: The rules for parsing http are a bit more nuanced than this_
 //!
 //! ```
-//! use bparse::{Pattern, Matches};
+//! use bparse::{Pattern, Parser};
 //!
 //! # fn main() {
 //! #   do_test().unwrap();
@@ -38,7 +38,7 @@
 //! // This input would probably come from a TcpStream
 //! let input = b"GET /hello?value=world HTTP/1.1\r\n";
 //!
-//! let matches = Matches::new(input);
+//! let mut parser = Parser::new(input);
 //!
 //! // A method is an alphabetic string with at least one character
 //! let method_pattern = bparse::range(b'a', b'z')
@@ -58,17 +58,12 @@
 //! // We want to match the version exactly
 //! let version_pattern = "HTTP/1.1";
 //!
-//! let result = matches
-//!     .pattern(method_pattern)?
-//!     .ignore(" ")?
-//!     .pattern(request_target_pattern)?
-//!     .ignore(" ")?
-//!     .pattern(version_pattern)?
-//!     .ignore("\r\n".and(bparse::end))?;
-//!
-//!
-//! // Et voila
-//! let [method, request_target, version] = result.0;
+//! let method = parser.match_pattern(method_pattern)?;
+//! parser.match_pattern(" ")?;
+//! let request_target = parser.match_pattern(request_target_pattern)?;
+//! parser.match_pattern(" ")?;
+//! let version = parser.match_pattern(version_pattern)?;
+//! parser.match_pattern("\r\n".and(bparse::end))?;
 //!
 //! assert_eq!(method, b"GET");
 //! assert_eq!(request_target, b"/hello?value=world");
@@ -81,7 +76,7 @@
 //! __Hexadecimal color parser:__
 //!
 //! ```rust
-//! use bparse::{Pattern, Matches};
+//! use bparse::{Pattern, Parser, range, end};
 //! use std::str::from_utf8;
 //!
 //! #[derive(Debug, PartialEq)]
@@ -100,18 +95,15 @@
 //! }
 //!
 //! fn hex_color(input: &str) -> Option<Color> {
-//!   let hexbyte = bparse::range(b'0', b'9')
-//!     .or(bparse::range(b'A', b'F'))
-//!     .or(bparse::range(b'a', b'f'))
-//!     .repeats(2);
+//!   let hexbyte = range(b'0', b'9').or(range(b'A', b'F')).or(range(b'a', b'f')).repeats(2);
 //!
-//!   let [red, green, blue] = Matches::new(input.as_bytes())
-//!     .ignore("#")?
-//!     .pattern(hexbyte)?
-//!     .pattern(hexbyte)?
-//!     .pattern(hexbyte)?
-//!     .ignore(bparse::end)?
-//!     .0;
+//!   let mut parser = Parser::new(input.as_bytes());
+//!
+//!   parser.match_pattern("#")?;
+//!   let red = parser.match_pattern(hexbyte)?;
+//!   let green = parser.match_pattern(hexbyte)?;
+//!   let blue = parser.match_pattern(hexbyte)?;
+//!   parser.match_pattern(end)?;
 //!
 //!   Some(Color {
 //!     red: u8::from_str_radix(from_utf8(red).unwrap(), 16).unwrap(),
@@ -121,10 +113,8 @@
 //! }
 //! ```
 
+use std::cmp;
 use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
-mod r#match;
-
-pub use r#match::*;
 
 /// An interval with a lower and (potentially unbounded) upper bound
 ///
@@ -234,60 +224,6 @@ pub trait Pattern {
             count: count.into(),
         }
     }
-
-    /// Expresses pattern negation
-    ///
-    /// Returns a new pattern that will match only if `self` does not match
-    ///
-    /// # Example
-    ///
-    /// Say you want to match a string of multiple 'a's and 'b's, except the string must not end in
-    /// a 'b':
-    /// ```
-    /// use bparse::{Pattern, end};
-    ///
-    /// let input1 = b"aabaaaa";
-    /// let input2 = b"aaaab";
-    ///
-    /// // a pattern of either a's or b's that do not occur at the input
-    /// let pattern = "a".or("b".and(end.not())).repeats(0..);
-    ///
-    /// assert_eq!(b"aabaaaa", pattern.test(input1).unwrap().0);
-    /// assert_eq!(b"aaaa", pattern.test(input2).unwrap().0);
-    ///
-    ///
-    /// ```
-    fn not(self) -> Not<Self>
-    where
-        Self: Sized,
-    {
-        Not { pattern: self }
-    }
-
-    /// Expresses an optional pattern
-    ///
-    /// Returns a new pattern that will always match the input regardless of the outcome of
-    /// matching `self`
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use bparse::Pattern;
-    ///
-    /// let input1 = b"aab";
-    /// let input2 = b"aa";
-    ///
-    /// let pattern = "aa".and("b".optional());
-    ///
-    /// assert_eq!(b"aab", pattern.test(input1).unwrap().0);
-    /// assert_eq!(b"aa", pattern.test(input2).unwrap().0);
-    /// ```
-    fn optional(self) -> Optional<Self>
-    where
-        Self: Sized,
-    {
-        Optional { pattern: self }
-    }
 }
 
 /// See [`Pattern::or`]
@@ -311,13 +247,13 @@ pub struct Repeat<P> {
     count: Interval<usize>,
 }
 
-/// See [`Pattern::not`]
+/// See [`not`]
 #[derive(Clone, Copy, Debug)]
 pub struct Not<P> {
     pattern: P,
 }
 
-/// See [`Pattern::optional`]
+/// See [`optional`]
 #[derive(Clone, Copy, Debug)]
 pub struct Optional<P> {
     pattern: P,
@@ -540,6 +476,66 @@ pub const fn noneof(exclusions: &str) -> NoneOf {
     NoneOf(set)
 }
 
+/// Expresses pattern negation
+///
+/// Returns a new pattern that will match only if `pattern` does not match
+///
+///
+/// # Example
+///
+/// Say you want to match a string of multiple 'a's and 'b's, except the string must not end in
+/// a 'b':
+/// ```
+/// use bparse::{Pattern, not, end};
+///
+/// let input1 = b"aabaaaa";
+/// let input2 = b"aaaab";
+///
+/// // a pattern of either a's or b's that do not occur at the input
+/// let pattern = "a".or("b".and(not(end))).repeats(0..);
+///
+/// assert_eq!(b"aabaaaa", pattern.test(input1).unwrap().0);
+/// assert_eq!(b"aaaa", pattern.test(input2).unwrap().0);
+/// ```
+///
+/// Note: This will always return `Some((&[], _))` (i.e. an empty slice) in the successful case..
+///
+/// # Example
+///
+/// ```
+/// use bparse::{Pattern, not};
+///
+/// let input = b"b";
+/// let pattern = not("a");
+///
+/// assert!(matches!(pattern.test(input), Some((&[], _))));
+/// ```
+pub fn not<P: Pattern>(pattern: P) -> Not<P> {
+    Not { pattern }
+}
+
+/// Expresses an optional pattern
+///
+/// Returns a new pattern that will always match the input regardless of the outcome of
+/// matching `self`
+///
+/// # Example
+///
+/// ```
+/// use bparse::{Pattern, optional};
+///
+/// let input1 = b"aab";
+/// let input2 = b"aa";
+///
+/// let pattern = "aa".and(optional("b"));
+///
+/// assert_eq!(b"aab", pattern.test(input1).unwrap().0);
+/// assert_eq!(b"aa", pattern.test(input2).unwrap().0);
+/// ```
+pub fn optional<P: Pattern>(pattern: P) -> Optional<P> {
+    Optional { pattern }
+}
+
 /// See [`oneof()`]
 #[derive(Debug, Clone, Copy)]
 pub struct OneOf([bool; 256]);
@@ -596,6 +592,49 @@ impl Pattern for ByteRange {
         Some((&input[0..1], &input[1..]))
     }
 }
+
+/// A byte parser that recognizes [`Pattern`]s
+pub struct Parser<'input> {
+    input: &'input [u8],
+    cursor: usize,
+}
+
+impl<'i> Parser<'i> {
+    /// Returns a new instance of [`Parser`] that will operate on `input`
+    pub fn new(input: &'i [u8]) -> Self {
+        Parser { input, cursor: 0 }
+    }
+
+    /// Advances the parser by `step`. Does nothing if the parser is at the end of the input
+    pub fn advance(&mut self, step: usize) {
+        // This guarantees that `cursor` never goes past the end of the input, which makes it such
+        // that calling `.remaining()` always gives you something (even if it is an empty slice)
+        let step = cmp::min(self.input.len() - self.cursor, step);
+        self.cursor += step;
+    }
+
+    /// Returns `true` if the parser reached the end of its input. Returns `false` otherwise
+    pub fn eof(&self) -> bool {
+        self.input.len() == self.cursor
+    }
+
+    /// Returns the part of the input that is yet to be consumed
+    pub fn remaining(&self) -> &'i [u8] {
+        &self.input[self.cursor..]
+    }
+
+    /// Tests `pattern` against the remaining input. If the pattern matches, the matching portion
+    /// is returned and the parser is advanced by the length of the matched slice.
+    ///
+    /// Returns `None` if the pattern does not match.
+    pub fn match_pattern(&mut self, pattern: impl Pattern) -> Option<&'i [u8]> {
+        let (matched, _) = pattern.test(self.remaining())?;
+
+        self.advance(matched.len());
+
+        Some(matched)
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -624,11 +663,11 @@ mod tests {
         do_test("9".and("7").and("8"), b"978", Some((b"978", b"")));
 
         // Negating a pattern
-        do_test(range(b'0', b'9').not(), b"a1b2", Some((b"", b"a1b2")));
+        do_test(not(range(b'0', b'9')), b"a1b2", Some((b"", b"a1b2")));
 
         // Optional
-        do_test(" ".optional().and("a"), b"a1b2", Some((b"a", b"1b2")));
-        do_test(" ".optional().and("a"), b" a1b2", Some((b" a", b"1b2")));
+        do_test(optional(" ").and("a"), b"a1b2", Some((b"a", b"1b2")));
+        do_test(optional(" ").and("a"), b" a1b2", Some((b" a", b"1b2")));
 
         // Parsing using functions
         fn parse_a(input: &[u8]) -> Option<(&[u8], &[u8])> {
@@ -688,6 +727,22 @@ mod tests {
         do_test("a".repeats(..=0), b"aaabb", Some((b"", b"aaabb")));
         do_test("a".repeats(..=1), b"aaabb", Some((b"a", b"aabb")));
         do_test("a".repeats(..=10), b"aaabb", Some((b"aaa", b"bb")));
+    }
+
+    #[test]
+    fn test_parser() {
+        let input = b"aa bbcc";
+        let mut parser = Parser::new(input);
+
+        let a = parser.match_pattern("a".repeats(2));
+        let _ = parser.match_pattern(optional(" "));
+        let b = parser.match_pattern("b".repeats(2));
+        let _ = parser.match_pattern(optional(" "));
+        let c = parser.match_pattern("c".repeats(2));
+
+        assert!(matches!(a, Some(b"aa")));
+        assert!(matches!(b, Some(b"bb")));
+        assert!(matches!(c, Some(b"cc")));
     }
 }
 
