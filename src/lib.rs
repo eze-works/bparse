@@ -437,6 +437,19 @@ pub fn hex(input: &[u8]) -> Option<(&[u8], &[u8])> {
 /// assert_eq!(punctuation.test(b",").unwrap().0, b",");
 /// assert_eq!(punctuation.test(b"a"), None);
 /// ```
+///
+/// This function is callable in const contexts. Additionally, the compile-time generated lookup
+/// table can be accessed from the [`OneOf`] struct
+///
+/// ```
+/// use bparse::oneof;
+/// const lookup: [bool; 256] = oneof("abc").0;
+/// assert!(lookup[b'a' as usize] == true);
+/// assert!(lookup[b'b' as usize] == true);
+/// assert!(lookup[b'c' as usize] == true);
+/// assert!(lookup[b'd' as usize] == false);
+/// ```
+///
 pub const fn oneof(alternatives: &str) -> OneOf {
     let bytes = alternatives.as_bytes();
     let mut set: [bool; 256] = [false; 256];
@@ -463,6 +476,18 @@ pub const fn oneof(alternatives: &str) -> OneOf {
 /// assert_eq!(nondigits.test(b"3"), None);
 /// ```
 ///
+/// This function is callable in const contexts. Additionally, the compile-time generated lookup
+/// table can be accessed from the [`NoneOf`] struct
+///
+/// ```
+/// use bparse::noneof;
+/// const lookup: [bool; 256] = noneof("abc").0;
+///
+/// assert!(lookup[b'a' as usize] == false);
+/// assert!(lookup[b'b' as usize] == false);
+/// assert!(lookup[b'c' as usize] == false);
+/// assert!(lookup[b'd' as usize] == true);
+/// ```
 pub const fn noneof(exclusions: &str) -> NoneOf {
     let bytes = exclusions.as_bytes();
     let mut set: [bool; 256] = [true; 256];
@@ -538,7 +563,7 @@ pub fn optional<P: Pattern>(pattern: P) -> Optional<P> {
 
 /// See [`oneof()`]
 #[derive(Debug, Clone, Copy)]
-pub struct OneOf([bool; 256]);
+pub struct OneOf(pub [bool; 256]);
 
 impl Pattern for OneOf {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
@@ -548,7 +573,7 @@ impl Pattern for OneOf {
 }
 
 /// See [`noneof()`]
-pub struct NoneOf([bool; 256]);
+pub struct NoneOf(pub [bool; 256]);
 
 impl Pattern for NoneOf {
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
