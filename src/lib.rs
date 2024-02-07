@@ -634,6 +634,18 @@ impl<'i> Parser<'i> {
 
         Some(matched)
     }
+
+    /// Similar to [`Parser::try_match`], but panics if the pattern does not match.
+    ///
+    /// This could be useful when you have previously peeked at the input (perhaps by using
+    /// [`Pattern::test`]) and later want to advance the parser
+    pub fn assert(&mut self, pattern: impl Pattern) -> &'i [u8] {
+        let (matched, _) = pattern
+            .test(self.remaining())
+            .expect("pattern assertion should not fail");
+        self.advance(matched.len());
+        matched
+    }
 }
 #[cfg(test)]
 mod tests {
