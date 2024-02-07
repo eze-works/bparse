@@ -635,10 +635,19 @@ impl<'i> Parser<'i> {
         Some(matched)
     }
 
+    /// Tests `pattern` against the remaining input but does not advance the parser. The matching
+    /// portion is returned.
+    ///
+    /// You can use [`Parser::assert`] later to advance the parser with the same pattern.
+    pub fn peek_match(&self, pattern: impl Pattern) -> Option<&'i [u8]> {
+        let (matched, _) = pattern.test(self.remaining())?;
+        Some(matched)
+    }
+
     /// Similar to [`Parser::try_match`], but panics if the pattern does not match.
     ///
     /// This could be useful when you have previously peeked at the input (perhaps by using
-    /// [`Pattern::test`]) and later want to advance the parser
+    /// [`Pattern::test`] or [`Parser::peek_match`]) and later want to advance the parser
     pub fn assert(&mut self, pattern: impl Pattern) -> &'i [u8] {
         let (matched, _) = pattern
             .test(self.remaining())
@@ -746,6 +755,7 @@ mod tests {
         let input = b"aa bbcc";
         let mut parser = Parser::new(input);
 
+        let peeked_a = parser.peek_match("a".repeats(2));
         let a = parser.try_match("a".repeats(2));
         let _ = parser.try_match(optional(" "));
         let b = parser.try_match("b".repeats(2));
@@ -754,6 +764,7 @@ mod tests {
         let huh = parser.try_match("d");
         parser.assert(end);
 
+        assert!(matches!(peeked_a, Some(b"aa")));
         assert!(matches!(a, Some(b"aa")));
         assert!(matches!(b, Some(b"bb")));
         assert!(matches!(c, Some(b"cc")));
