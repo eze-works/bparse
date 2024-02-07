@@ -596,31 +596,32 @@ impl Pattern for ByteRange {
 /// A byte parser that recognizes [`Pattern`]s
 pub struct Parser<'input> {
     input: &'input [u8],
-    cursor: usize,
+    /// The parser's current position within the input
+    pub pos: usize,
 }
 
 impl<'i> Parser<'i> {
     /// Returns a new instance of [`Parser`] that will operate on `input`
     pub fn new(input: &'i [u8]) -> Self {
-        Parser { input, cursor: 0 }
+        Parser { input, pos: 0 }
     }
 
     /// Advances the parser by `step`. Does nothing if the parser is at the end of the input
     pub fn advance(&mut self, step: usize) {
         // This guarantees that `cursor` never goes past the end of the input, which makes it such
         // that calling `.remaining()` always gives you something (even if it is an empty slice)
-        let step = cmp::min(self.input.len() - self.cursor, step);
-        self.cursor += step;
+        let step = cmp::min(self.input.len() - self.pos, step);
+        self.pos += step;
     }
 
     /// Returns `true` if the parser reached the end of its input. Returns `false` otherwise
     pub fn eof(&self) -> bool {
-        self.input.len() == self.cursor
+        self.input.len() == self.pos
     }
 
     /// Returns the part of the input that is yet to be consumed
     pub fn remaining(&self) -> &'i [u8] {
-        &self.input[self.cursor..]
+        &self.input[self.pos..]
     }
 
     /// Tests `pattern` against the remaining input. If the pattern matches, the matching portion
