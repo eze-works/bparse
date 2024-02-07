@@ -752,6 +752,7 @@ mod tests {
         let _ = parser.try_match(optional(" "));
         let c = parser.try_match("c".repeats(2));
         let huh = parser.try_match("d");
+        parser.assert(end);
 
         assert!(matches!(a, Some(b"aa")));
         assert!(matches!(b, Some(b"bb")));
