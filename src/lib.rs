@@ -260,6 +260,7 @@ pub struct Optional<P> {
 }
 
 impl<C1: Pattern, C2: Pattern> Pattern for Or<C1, C2> {
+    #[inline]
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         self.pattern1
             .test(input)
@@ -268,6 +269,7 @@ impl<C1: Pattern, C2: Pattern> Pattern for Or<C1, C2> {
 }
 
 impl<C1: Pattern, C2: Pattern> Pattern for And<C1, C2> {
+    #[inline]
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut offset = 0;
         let Some((value, rest)) = self.pattern1.test(input) else {
@@ -287,6 +289,7 @@ impl<C1: Pattern, C2: Pattern> Pattern for And<C1, C2> {
 }
 
 impl<P: Pattern> Pattern for Repeat<P> {
+    #[inline]
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let mut counter = 0;
         let mut offset = 0;
@@ -323,6 +326,7 @@ impl<P> Pattern for Not<P>
 where
     P: Pattern,
 {
+    #[inline]
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         if self.pattern.test(input).is_some() {
             return None;
@@ -336,6 +340,7 @@ impl<P> Pattern for Optional<P>
 where
     P: Pattern,
 {
+    #[inline]
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         self.pattern.test(input).or(Some((b"", input)))
     }
@@ -345,17 +350,26 @@ impl<F> Pattern for F
 where
     F: Fn(&[u8]) -> Option<(&[u8], &[u8])>,
 {
+    #[inline]
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         (self)(input)
     }
 }
 
 impl Pattern for &str {
+    #[inline]
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let bytes = self.as_bytes();
-        let Some(_) = input.strip_prefix(bytes) else {
+
+        if bytes.len() > input.len() {
             return None;
-        };
+        }
+
+        for (i, byte) in bytes.iter().enumerate() {
+            if &input[i] != byte {
+                return None;
+            }
+        }
 
         Some((&input[..self.len()], &input[self.len()..]))
     }
@@ -566,6 +580,7 @@ pub fn optional<P: Pattern>(pattern: P) -> Optional<P> {
 pub struct OneOf(pub [bool; 256]);
 
 impl Pattern for OneOf {
+    #[inline]
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let first = *input.first()?;
         self.0[first as usize].then_some((&input[0..1], &input[1..]))
@@ -576,6 +591,7 @@ impl Pattern for OneOf {
 pub struct NoneOf(pub [bool; 256]);
 
 impl Pattern for NoneOf {
+    #[inline]
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let first = *input.first()?;
         self.0[first as usize].then_some((&input[0..1], &input[1..]))
@@ -603,6 +619,7 @@ pub fn range(lo: u8, hi: u8) -> ByteRange {
 pub struct ByteRange(u8, u8);
 
 impl Pattern for ByteRange {
+    #[inline]
     fn test<'i>(&self, input: &'i [u8]) -> Option<(&'i [u8], &'i [u8])> {
         let first = *input.first()?;
 
@@ -632,6 +649,7 @@ impl<'i> Parser<'i> {
     }
 
     /// Advances the parser by `step`. Does nothing if the parser is at the end of the input
+    #[inline]
     pub fn advance(&mut self, step: usize) {
         // This guarantees that `cursor` never goes past the end of the input, which makes it such
         // that calling `.remaining()` always gives you something (even if it is an empty slice)
@@ -640,11 +658,13 @@ impl<'i> Parser<'i> {
     }
 
     /// Returns `true` if the parser reached the end of its input. Returns `false` otherwise
+    #[inline]
     pub fn eof(&self) -> bool {
         self.input.len() == self.pos
     }
 
     /// Returns the part of the input that is yet to be consumed
+    #[inline]
     pub fn remaining(&self) -> &'i [u8] {
         &self.input[self.pos..]
     }
@@ -653,11 +673,10 @@ impl<'i> Parser<'i> {
     /// is returned and the parser is advanced by the length of the matched slice.
     ///
     /// Returns `None` if the pattern does not match.
+    #[inline]
     pub fn try_match(&mut self, pattern: impl Pattern) -> Option<&'i [u8]> {
         let (matched, _) = pattern.test(self.remaining())?;
-
         self.advance(matched.len());
-
         Some(matched)
     }
 
@@ -665,6 +684,7 @@ impl<'i> Parser<'i> {
     /// portion is returned.
     ///
     /// You can use [`Parser::assert`] later to advance the parser with the same pattern.
+    #[inline]
     pub fn peek_match(&self, pattern: impl Pattern) -> Option<&'i [u8]> {
         let (matched, _) = pattern.test(self.remaining())?;
         Some(matched)
@@ -674,6 +694,7 @@ impl<'i> Parser<'i> {
     ///
     /// This could be useful when you have previously peeked at the input (perhaps by using
     /// [`Pattern::test`] or [`Parser::peek_match`]) and later want to advance the parser
+    #[inline]
     pub fn assert(&mut self, pattern: impl Pattern) -> &'i [u8] {
         let (matched, _) = pattern
             .test(self.remaining())
