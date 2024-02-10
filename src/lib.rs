@@ -113,7 +113,6 @@
 //! }
 //! ```
 
-use std::cmp;
 use std::ops::{RangeFrom, RangeInclusive, RangeToInclusive};
 
 /// An interval with a lower and (potentially unbounded) upper bound
@@ -651,10 +650,12 @@ impl<'i> Parser<'i> {
     /// Advances the parser by `step`. Does nothing if the parser is at the end of the input
     #[inline]
     pub fn advance(&mut self, step: usize) {
-        // This guarantees that `cursor` never goes past the end of the input, which makes it such
-        // that calling `.remaining()` always gives you something (even if it is an empty slice)
-        let step = cmp::min(self.input.len() - self.pos, step);
-        self.pos += step;
+        let new_pos = self.pos + step;
+        if new_pos > self.input.len() {
+            self.pos = self.input.len();
+        } else {
+            self.pos = new_pos;
+        }
     }
 
     /// Returns `true` if the parser reached the end of its input. Returns `false` otherwise
