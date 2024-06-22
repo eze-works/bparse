@@ -384,7 +384,7 @@ impl Pattern for &str {
 /// assert_eq!(end.test(b"abc"), None);
 /// assert_eq!(end.test(b"").unwrap().0, b"");
 /// ```
-pub fn end(input: &[u8]) -> Option<(&[u8], &[u8])> {
+pub const fn end(input: &[u8]) -> Option<(&[u8], &[u8])> {
     if input.is_empty() {
         Some((&[], input))
     } else {
@@ -548,7 +548,7 @@ pub const fn noneof(exclusions: &str) -> NoneOf {
 ///
 /// assert!(matches!(pattern.test(input), Some((&[], _))));
 /// ```
-pub fn not<P: Pattern>(pattern: P) -> Not<P> {
+pub const fn not<P: Pattern>(pattern: P) -> Not<P> {
     Not { pattern }
 }
 
@@ -570,7 +570,7 @@ pub fn not<P: Pattern>(pattern: P) -> Not<P> {
 /// assert_eq!(b"aab", pattern.test(input1).unwrap().0);
 /// assert_eq!(b"aa", pattern.test(input2).unwrap().0);
 /// ```
-pub fn optional<P: Pattern>(pattern: P) -> Optional<P> {
+pub const fn optional<P: Pattern>(pattern: P) -> Optional<P> {
     Optional { pattern }
 }
 
@@ -609,7 +609,7 @@ impl Pattern for NoneOf {
 /// assert_eq!(digit.test(b"1").unwrap().0, b"1");
 /// assert_eq!(digit.test(b"a"), None);
 /// ```
-pub fn range(lo: u8, hi: u8) -> ByteRange {
+pub const fn range(lo: u8, hi: u8) -> ByteRange {
     ByteRange(lo, hi)
 }
 
