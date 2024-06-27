@@ -518,6 +518,9 @@ pub const fn noneof(exclusions: &str) -> NoneOf {
 ///
 /// Returns a new pattern that will match only if `pattern` does not match
 ///
+/// Note: This is a peek-like operation. It will always return `Some((&[], _))` (i.e. an empty
+/// slice) in the successful case. It does not advance [`Parser`]. It is useful for "negative
+/// lookahead"
 ///
 /// # Example
 ///
@@ -536,7 +539,6 @@ pub const fn noneof(exclusions: &str) -> NoneOf {
 /// assert_eq!(b"aaaa", pattern.test(input2).unwrap().0);
 /// ```
 ///
-/// Note: This will always return `Some((&[], _))` (i.e. an empty slice) in the successful case..
 ///
 /// # Example
 ///
