@@ -1,12 +1,11 @@
 [package]
 name = "bparse"
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 license = "MIT"
 readme = "README.md"
 description = "A library for parsing bytes"
-repository = "https://git.sr.ht/~eanyanwu/bparse"
+repository = "https://github.com/eze-works/bparse"
 keywords = ["parser", "bytes"]
-
 
 [dependencies]
